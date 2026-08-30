@@ -1,5 +1,8 @@
 name: Build and Release Android APK
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ main, master ]
