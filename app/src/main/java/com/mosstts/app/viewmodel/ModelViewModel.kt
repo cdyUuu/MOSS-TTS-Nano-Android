@@ -39,7 +39,7 @@ class ModelViewModel(application: Application) : AndroidViewModel(application) {
     private val _modelSize = MutableStateFlow(0L)
     val modelSize: StateFlow<Long> = _modelSize.asStateFlow()
 
-    private val _selectedMirrorId = MutableStateFlow("hf_mirror")
+    private val _selectedMirrorId = MutableStateFlow("none")
     val selectedMirrorId: StateFlow<String> = _selectedMirrorId.asStateFlow()
 
     private val _errorMessage = MutableStateFlow<String?>(null)

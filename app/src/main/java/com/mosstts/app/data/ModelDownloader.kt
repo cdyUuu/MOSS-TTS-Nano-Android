@@ -31,6 +31,7 @@ class ModelDownloader(private val context: Context) {
         data class MirrorSource(val id: String, val name: String, val baseUrl: String)
 
         val MIRROR_SOURCES = listOf(
+            MirrorSource("none", "不使用", "https://huggingface.co"),
             MirrorSource("hf_mirror", "HF-Mirror", "https://hf-mirror.com"),
             MirrorSource("modelscope", "ModelScope 魔搭", "https://www.modelscope.cn"),
             MirrorSource("ghproxy", "GhProxy 加速", "https://gh-proxy.com"),
