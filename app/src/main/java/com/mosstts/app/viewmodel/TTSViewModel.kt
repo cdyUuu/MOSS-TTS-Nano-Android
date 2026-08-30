@@ -235,7 +235,10 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
             _isSynthesizing.value = false
             if (result != null) {
                 _lastResult.value = result
-                if (!useStreaming) {
+                if (useStreaming) {
+                    // 流式模式下保存完整PCM，用于暂停后继续播放或重播
+                    audioPlayer.setLastPcm(result.pcm)
+                } else {
                     audioPlayer.playFull(result.pcm)
                 }
                 // 保存到历史记录

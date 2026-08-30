@@ -48,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -322,24 +323,40 @@ fun SettingsScreen(
                         onClick = {
                             isCheckingUpdate = true
                             updateMessage = null
-                            scope.launch {
+                            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
                                     val url = java.net.URL("https://api.github.com/repos/cdyUuu/MOSS-TTS-Nano-Android/releases/latest")
                                     val conn = url.openConnection() as java.net.HttpURLConnection
+                                    conn.connectTimeout = 10000
+                                    conn.readTimeout = 10000
                                     conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
-                                    val response = conn.inputStream.bufferedReader().readText()
-                                    val json = org.json.JSONObject(response)
-                                    latestVersion = json.getString("tag_name")
-                                    val current = packageInfo.versionName
-                                    if (latestVersion != "v$current") {
-                                        updateMessage = "发现新版本：$latestVersion，点击下载"
+                                    conn.setRequestProperty("User-Agent", "MOSS-TTS-Android")
+                                    val responseCode = conn.responseCode
+                                    if (responseCode != 200) {
+                                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            updateMessage = "检查更新失败：HTTP $responseCode"
+                                        }
                                     } else {
-                                        updateMessage = "已是最新版本"
+                                        val response = conn.inputStream.bufferedReader().readText()
+                                        val json = org.json.JSONObject(response)
+                                        latestVersion = json.getString("tag_name")
+                                        val current = packageInfo.versionName
+                                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            if (latestVersion != "v$current") {
+                                                updateMessage = "发现新版本：$latestVersion，点击下载"
+                                            } else {
+                                                updateMessage = "已是最新版本"
+                                            }
+                                        }
                                     }
                                 } catch (e: Exception) {
-                                    updateMessage = "检查更新失败：${e.message}"
+                                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        updateMessage = "检查更新失败：${e.message ?: "网络错误"}"
+                                    }
                                 } finally {
-                                    isCheckingUpdate = false
+                                    withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        isCheckingUpdate = false
+                                    }
                                 }
                             }
                         },

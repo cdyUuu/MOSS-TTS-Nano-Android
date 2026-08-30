@@ -105,6 +105,14 @@ class StreamingAudioPlayer(
     }
 
     /**
+     * 设置最后播放的PCM数据（用于流式合成完成后保存完整音频）
+     */
+    fun setLastPcm(pcm: FloatArray) {
+        lastPcm = pcm
+        totalSamples = pcm.size.toLong()
+    }
+
+    /**
      * 开始播放（流式模式）。
      */
     fun start() {
