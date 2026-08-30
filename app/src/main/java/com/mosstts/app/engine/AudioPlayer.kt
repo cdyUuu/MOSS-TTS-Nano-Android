@@ -178,29 +178,31 @@ class StreamingAudioPlayer(
         isPlaying.set(true)
         audioTrack?.play()
         _state.value = PlaybackState.PLAYING
-        // 重启播放线程
+        // 启动等待线程，检测播放完成（数据已在AudioTrack缓冲区中，无需从队列读取）
         playbackThread = Thread({
             try {
-                while (isPlaying.get()) {
-                    val chunk = pcmQueue.poll(100, java.util.concurrent.TimeUnit.MILLISECONDS)
-                    if (chunk != null) {
-                        if (chunk.isEmpty()) break
-                        val written = audioTrack?.write(chunk, 0, chunk.size) ?: 0
-                        if (written > 0) {
-                            playedSamples += written / 2
-                            if (totalSamples > 0) {
-                                _progress.value = playedSamples.toFloat() / totalSamples
-                            }
+                audioTrack?.let {
+                    while (isPlaying.get() &&
+                        it.playState == AudioTrack.PLAYSTATE_PLAYING &&
+                        it.playbackHeadPosition < totalSamples
+                    ) {
+                        playedSamples = it.playbackHeadPosition.toLong()
+                        if (totalSamples > 0) {
+                            _progress.value = playedSamples.toFloat() / totalSamples
                         }
+                        Thread.sleep(50)
                     }
                 }
-                if (isPlaying.get()) _state.value = PlaybackState.COMPLETED
+                if (isPlaying.get()) {
+                    _progress.value = 1f
+                    _state.value = PlaybackState.COMPLETED
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Resume playback error", e)
             } finally {
                 isPlaying.set(false)
             }
-        }, "AudioPlayback").apply { isDaemon = true }
+        }, "AudioResume").apply { isDaemon = true }
         playbackThread?.start()
     }
 
