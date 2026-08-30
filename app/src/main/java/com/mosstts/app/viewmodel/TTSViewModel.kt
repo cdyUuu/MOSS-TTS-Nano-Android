@@ -210,7 +210,7 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
         _synthesisProgress.value = 0f
 
         viewModelScope.launch {
-            val useStreaming = preferences.useStreaming.first()
+            val useStreaming = false // 禁用流式播放，等全部合成完再播放
             val maxFrames = preferences.maxFrames.first()
             val voice = if (_referenceAudioCodes.value != null) null else _selectedVoice.value.ifEmpty { null }
 

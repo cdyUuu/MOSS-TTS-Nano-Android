@@ -240,20 +240,6 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("流式播放", style = MaterialTheme.typography.bodyMedium)
-                    Switch(
-                        checked = streamingPlayback,
-                        onCheckedChange = {
-                            streamingPlayback = it
-                            ttsViewModel.updateStreamingPlayback(it)
-                        },
-                    )
-                }
             }
         }
 
@@ -408,8 +394,7 @@ fun SettingsScreen(
                     "内置多种预设音色",
                     "支持声音克隆（录制/导入参考音频）",
                     "支持多个克隆音色管理",
-                    "流式合成，实时播放",
-                    "支持模型导入导出",
+                                        "支持模型导入导出",
                     "多镜像源下载，国内加速",
                     "深色模式适配",
                 )

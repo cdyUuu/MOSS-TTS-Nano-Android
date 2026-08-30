@@ -16,7 +16,7 @@ data class AppSettings(
     val cpuThreads: Int = 4,
     val maxFrames: Int = 375,
     val playbackSpeed: Float = 1.0f,
-    val streamingPlayback: Boolean = true,
+    val streamingPlayback: Boolean = false,
     val darkMode: String = "system", // system, light, dark
     val hideNavigationBar: Boolean = false,
     val referenceAudioPath: String = "",
@@ -43,7 +43,7 @@ class PreferencesManager(private val context: Context) {
             cpuThreads = prefs[KEY_CPU_THREADS] ?: 4,
             maxFrames = prefs[KEY_MAX_FRAMES] ?: 375,
             playbackSpeed = (prefs[KEY_PLAYBACK_SPEED] ?: "1.0").toFloatOrNull() ?: 1.0f,
-            streamingPlayback = prefs[KEY_USE_STREAMING] ?: true,
+            streamingPlayback = prefs[KEY_USE_STREAMING] ?: false,
             darkMode = prefs[KEY_DARK_MODE] ?: "system",
             hideNavigationBar = prefs[KEY_HIDE_NAV_BAR] ?: false,
             referenceAudioPath = prefs[KEY_REFERENCE_AUDIO_PATH] ?: "",
@@ -55,7 +55,7 @@ class PreferencesManager(private val context: Context) {
     val cpuThreads: Flow<Int> = context.dataStore.data.map { it[KEY_CPU_THREADS] ?: 4 }
     val maxFrames: Flow<Int> = context.dataStore.data.map { it[KEY_MAX_FRAMES] ?: 375 }
     val playbackSpeed: Flow<String> = context.dataStore.data.map { it[KEY_PLAYBACK_SPEED] ?: "1.0" }
-    val useStreaming: Flow<Boolean> = context.dataStore.data.map { it[KEY_USE_STREAMING] ?: true }
+    val useStreaming: Flow<Boolean> = context.dataStore.data.map { it[KEY_USE_STREAMING] ?: false }
     val darkMode: Flow<String> = context.dataStore.data.map { it[KEY_DARK_MODE] ?: "system" }
     val hideNavigationBar: Flow<Boolean> = context.dataStore.data.map { it[KEY_HIDE_NAV_BAR] ?: false }
     val referenceAudioPath: Flow<String> = context.dataStore.data.map { it[KEY_REFERENCE_AUDIO_PATH] ?: "" }
