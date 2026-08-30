@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
@@ -29,6 +30,8 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -42,7 +45,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -66,6 +71,10 @@ fun SettingsScreen(
     var darkMode by remember { mutableStateOf(preferences.darkMode) }
     var hideNavigationBar by remember { mutableStateOf(preferences.hideNavigationBar) }
     var isBatteryOptimized by remember { mutableStateOf(false) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var latestVersion by remember { mutableStateOf<String?>(null) }
+    var updateMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     val speedOptions = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
     val darkModeOptions = listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色")
@@ -306,6 +315,63 @@ fun SettingsScreen(
                 Row {
                     Text("版本号：", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("${packageInfo.versionName} (${packageInfo.longVersionCode})", style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedButton(
+                        onClick = {
+                            isCheckingUpdate = true
+                            updateMessage = null
+                            scope.launch {
+                                try {
+                                    val url = java.net.URL("https://api.github.com/repos/cdyUuu/MOSS-TTS-Nano-Android/releases/latest")
+                                    val conn = url.openConnection() as java.net.HttpURLConnection
+                                    conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
+                                    val response = conn.inputStream.bufferedReader().readText()
+                                    val json = org.json.JSONObject(response)
+                                    latestVersion = json.getString("tag_name")
+                                    val current = packageInfo.versionName
+                                    if (latestVersion != "v$current") {
+                                        updateMessage = "发现新版本：$latestVersion，点击下载"
+                                    } else {
+                                        updateMessage = "已是最新版本"
+                                    }
+                                } catch (e: Exception) {
+                                    updateMessage = "检查更新失败：${e.message}"
+                                } finally {
+                                    isCheckingUpdate = false
+                                }
+                            }
+                        },
+                        enabled = !isCheckingUpdate,
+                    ) {
+                        if (isCheckingUpdate) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("检查中...")
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("检查更新")
+                        }
+                    }
+                }
+                if (updateMessage != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        updateMessage ?: "",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (updateMessage?.contains("最新") == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                    if (latestVersion != null && latestVersion != "v${packageInfo.versionName}") {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        TextButton(onClick = {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/cdyUuu/MOSS-TTS-Nano-Android/releases/latest"))
+                            context.startActivity(intent)
+                        }) {
+                            Text("前往下载 ->")
+                        }
+                    }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 

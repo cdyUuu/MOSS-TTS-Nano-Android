@@ -178,6 +178,18 @@ class ModelManager(private val context: Context) {
         }
     }
 
+    fun saveWavToPath(pcm: FloatArray, filePath: String): Boolean {
+        return try {
+            val outputFile = File(filePath)
+            outputFile.parentFile?.mkdirs()
+            engine?.writeWav(pcm, outputFile)
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save WAV to path", e)
+            false
+        }
+    }
+
     fun release() {
         try {
             engine?.close()

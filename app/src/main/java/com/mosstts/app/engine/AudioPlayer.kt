@@ -37,6 +37,7 @@ class StreamingAudioPlayer(
     private var playbackThread: Thread? = null
     private var totalSamples = 0L
     private var playedSamples = 0L
+    private var lastPcm: FloatArray? = null
 
     fun prepare() {
         release()
@@ -86,12 +87,21 @@ class StreamingAudioPlayer(
     fun playFull(pcm: FloatArray) {
         stop()
         prepare()
+        lastPcm = pcm
         totalSamples = pcm.size.toLong()
+        playedSamples = 0
         val pcm16 = FloatArrayToPCM16(pcm)
         pcmQueue.offer(pcm16)
         // 标记结束
         pcmQueue.offer(ByteArray(0))
         start()
+    }
+
+    /**
+     * 重新播放最后一次的音频
+     */
+    fun replay() {
+        lastPcm?.let { playFull(it) }
     }
 
     /**
@@ -152,6 +162,10 @@ class StreamingAudioPlayer(
     }
 
     fun resume() {
+        if (_state.value == PlaybackState.COMPLETED) {
+            replay()
+            return
+        }
         if (_state.value != PlaybackState.PAUSED) return
         isPlaying.set(true)
         audioTrack?.play()

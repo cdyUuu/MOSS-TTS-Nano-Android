@@ -108,3 +108,4 @@ Thumbs.db
 __pycache__/
 *.pyc
 fix_*.py
+*.keystore

@@ -11,6 +11,8 @@ import androidx.lifecycle.viewModelScope
 import com.mosstts.app.MossTTSApp
 import com.mosstts.app.data.ClonedVoice
 import com.mosstts.app.data.ClonedVoiceStore
+import com.mosstts.app.data.HistoryStore
+import com.mosstts.app.data.SynthesisHistory
 import com.mosstts.app.data.ModelManager
 import com.mosstts.app.data.PreferencesManager
 import com.mosstts.app.engine.StreamingAudioPlayer
@@ -35,6 +37,7 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
     val preferences: PreferencesManager = app.preferences
     val modelManager = ModelManager(application)
     private val clonedVoiceStore = ClonedVoiceStore(application)
+    private val historyStore = HistoryStore(application)
 
     private val audioPlayer = StreamingAudioPlayer(48000)
 
@@ -80,6 +83,12 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _saveMessage = MutableStateFlow<String?>(null)
+    val saveMessage: StateFlow<String?> = _saveMessage.asStateFlow()
+
+    private val _history = MutableStateFlow<List<SynthesisHistory>>(emptyList())
+    val history: StateFlow<List<SynthesisHistory>> = _history.asStateFlow()
+
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
 
@@ -107,6 +116,8 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
         }
         // 加载克隆音色列表
         loadClonedVoices()
+        // 加载历史记录
+        _history.value = historyStore.getAll()
     }
 
     private fun loadClonedVoices() {
@@ -227,6 +238,17 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
                 if (!useStreaming) {
                     audioPlayer.playFull(result.pcm)
                 }
+                // 保存到历史记录
+                val voiceName = _referenceAudioName.value.ifEmpty { _selectedVoice.value.ifEmpty { "默认音色" } }
+                val historyItem = SynthesisHistory(
+                    id = "hist_${System.currentTimeMillis()}",
+                    text = inputText,
+                    voice = voiceName,
+                    createdAt = System.currentTimeMillis(),
+                    durationMs = (result.pcm.size / 48).toLong(), // 48000Hz / 1000 = 48 samples per ms
+                )
+                historyStore.add(historyItem)
+                _history.value = historyStore.getAll()
             } else {
                 _errorMessage.value = "合成失败，请重试"
                 audioPlayer.stop()
@@ -246,9 +268,43 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
         audioPlayer.resume()
     }
 
-    fun saveCurrentAudio(fileName: String): File? {
+    fun saveCurrentAudio(fileName: String? = null): File? {
         val result = _lastResult.value ?: return null
-        return modelManager.saveWav(result.pcm, fileName)
+        val name = fileName ?: "tts_${System.currentTimeMillis()}.wav"
+        return try {
+            // 保存到公共 Download 目录
+            val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val outputDir = java.io.File(downloadDir, "MOSS_TTS")
+            outputDir.mkdirs()
+            val outputFile = java.io.File(outputDir, name)
+            modelManager.saveWavToPath(result.pcm, outputFile.absolutePath)
+            _saveMessage.value = "已保存到: ${outputFile.absolutePath}"
+            AppLogger.info(TAG, "音频已保存: ${outputFile.absolutePath}")
+            outputFile
+        } catch (e: Exception) {
+            AppLogger.error(TAG, "保存音频失败: ${e.message}", e)
+            _errorMessage.value = "保存失败: ${e.message}"
+            null
+        }
+    }
+
+    fun clearSaveMessage() {
+        _saveMessage.value = null
+    }
+
+    fun deleteHistory(id: String) {
+        historyStore.delete(id)
+        _history.value = historyStore.getAll()
+    }
+
+    fun clearHistory() {
+        historyStore.clear()
+        _history.value = emptyList()
+    }
+
+    fun playFromHistory(text: String) {
+        _text.value = text
+        synthesizeAndPlay()
     }
 
     fun clearError() {

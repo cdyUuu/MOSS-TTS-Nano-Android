@@ -31,11 +31,10 @@ class ModelDownloader(private val context: Context) {
         data class MirrorSource(val id: String, val name: String, val baseUrl: String)
 
         val MIRROR_SOURCES = listOf(
-            MirrorSource("none", "不使用", "https://huggingface.co"),
+            MirrorSource("none", "官方直连", "https://huggingface.co"),
             MirrorSource("hf_mirror", "HF-Mirror", "https://hf-mirror.com"),
             MirrorSource("modelscope", "ModelScope 魔搭", "https://www.modelscope.cn"),
             MirrorSource("ghproxy", "GhProxy 加速", "https://gh-proxy.com"),
-            MirrorSource("huggingface", "HuggingFace 官方", "https://huggingface.co"),
         )
 
         // TTS 模型关键文件（用于检查是否下载完成）
