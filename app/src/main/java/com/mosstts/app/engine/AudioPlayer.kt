@@ -1,20 +1,23 @@
 package com.mosstts.app.engine
 
-import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioManager
-import android.media.AudioTrack
+import android.content.Context
+import android.media.MediaPlayer
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.atomic.AtomicBoolean
+import java.io.File
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
- * 流式音频播放器。支持边生成边播放，也支持完整 PCM 播放。
+ * 音频播放器。使用 MediaPlayer 播放 WAV 文件，暂停/继续更可靠。
  */
 class StreamingAudioPlayer(
+    private val context: Context,
     private val sampleRate: Int = 48000,
 ) {
     companion object {
@@ -31,70 +34,42 @@ class StreamingAudioPlayer(
     private val _progress = MutableStateFlow(0f)
     val progress: StateFlow<Float> = _progress.asStateFlow()
 
-    private var audioTrack: AudioTrack? = null
-    private val pcmQueue = LinkedBlockingQueue<ByteArray>()
-    private val isPlaying = AtomicBoolean(false)
-    private var playbackThread: Thread? = null
-    private var totalSamples = 0L
-    private var playedSamples = 0L
+    private var mediaPlayer: MediaPlayer? = null
+    private var tempWavFile: File? = null
     private var lastPcm: FloatArray? = null
-
-    fun prepare() {
-        release()
-        val minBufferSize = AudioTrack.getMinBufferSize(
-            sampleRate,
-            AudioFormat.CHANNEL_OUT_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
-        val bufferSize = maxOf(minBufferSize * 4, sampleRate * 2) // 至少 1 秒缓冲
-
-        audioTrack = AudioTrack.Builder()
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build()
-            )
-            .setAudioFormat(
-                AudioFormat.Builder()
-                    .setSampleRate(sampleRate)
-                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                    .build()
-            )
-            .setBufferSizeInBytes(bufferSize)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build()
-
-        totalSamples = 0L
-        playedSamples = 0L
-        _progress.value = 0f
-    }
-
-    /**
-     * 流式写入 PCM 数据（FloatArray，范围 -1.0 到 1.0）。
-     */
-    fun write(pcm: FloatArray) {
-        if (audioTrack == null) prepare()
-        totalSamples += pcm.size
-        val pcm16 = FloatArrayToPCM16(pcm)
-        pcmQueue.offer(pcm16)
-    }
+    private var totalDurationMs = 0L
+    private val handler = Handler(Looper.getMainLooper())
+    private var progressRunnable: Runnable? = null
 
     /**
      * 写入完整 PCM 并开始播放。
      */
     fun playFull(pcm: FloatArray) {
         stop()
-        prepare()
         lastPcm = pcm
-        totalSamples = pcm.size.toLong()
-        playedSamples = 0
-        val pcm16 = FloatArrayToPCM16(pcm)
-        pcmQueue.offer(pcm16)
-        // 标记结束
-        pcmQueue.offer(ByteArray(0))
-        start()
+        totalDurationMs = (pcm.size * 1000L / sampleRate)
+
+        // 保存为临时 WAV 文件
+        tempWavFile = File(context.cacheDir, "tts_playback_${System.currentTimeMillis()}.wav")
+        saveWav(pcm, tempWavFile!!)
+
+        try {
+            mediaPlayer = MediaPlayer().apply {
+                setDataSource(tempWavFile!!.absolutePath)
+                prepare()
+                setOnCompletionListener {
+                    _progress.value = 1f
+                    _state.value = PlaybackState.COMPLETED
+                    stopProgressUpdate()
+                }
+                start()
+            }
+            _state.value = PlaybackState.PLAYING
+            startProgressUpdate()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to play audio", e)
+            _state.value = PlaybackState.STOPPED
+        }
     }
 
     /**
@@ -105,70 +80,21 @@ class StreamingAudioPlayer(
     }
 
     /**
-     * 设置最后播放的PCM数据（用于流式合成完成后保存完整音频）
+     * 设置最后播放的PCM数据
      */
     fun setLastPcm(pcm: FloatArray) {
         lastPcm = pcm
-        totalSamples = pcm.size.toLong()
-    }
-
-    /**
-     * 开始播放（流式模式）。
-     */
-    fun start() {
-        if (isPlaying.get()) return
-        isPlaying.set(true)
-        _state.value = PlaybackState.PLAYING
-        audioTrack?.play()
-
-        playbackThread = Thread({
-            try {
-                while (isPlaying.get()) {
-                    val chunk = pcmQueue.poll(100, java.util.concurrent.TimeUnit.MILLISECONDS)
-                    if (chunk != null) {
-                        if (chunk.isEmpty()) {
-                            // 流结束标记
-                            break
-                        }
-                        val written = audioTrack?.write(chunk, 0, chunk.size) ?: 0
-                        if (written > 0) {
-                            playedSamples += written / 2 // 16-bit = 2 bytes per sample
-                            if (totalSamples > 0) {
-                                _progress.value = playedSamples.toFloat() / totalSamples
-                            }
-                        }
-                    }
-                }
-                // 等待 AudioTrack 播放完缓冲区（暂停时继续等待，不退出）
-                audioTrack?.let {
-                    while (isPlaying.get() && it.playbackHeadPosition < totalSamples) {
-                        playedSamples = it.playbackHeadPosition.toLong()
-                        if (totalSamples > 0) {
-                            _progress.value = playedSamples.toFloat() / totalSamples
-                        }
-                        Thread.sleep(50)
-                    }
-                }
-                if (isPlaying.get()) {
-                    _progress.value = 1f
-                    _state.value = PlaybackState.COMPLETED
-                }
-            } catch (e: InterruptedException) {
-                Log.d(TAG, "Playback thread interrupted")
-            } catch (e: Exception) {
-                Log.e(TAG, "Playback error", e)
-                _state.value = PlaybackState.STOPPED
-            } finally {
-                isPlaying.set(false)
-            }
-        }, "AudioPlayback").apply { isDaemon = true }
-        playbackThread?.start()
     }
 
     fun pause() {
         if (_state.value != PlaybackState.PLAYING) return
-        audioTrack?.pause()
-        _state.value = PlaybackState.PAUSED
+        try {
+            mediaPlayer?.pause()
+            _state.value = PlaybackState.PAUSED
+            stopProgressUpdate()
+        } catch (e: Exception) {
+            Log.e(TAG, "Pause failed", e)
+        }
     }
 
     fun resume() {
@@ -177,48 +103,101 @@ class StreamingAudioPlayer(
             return
         }
         if (_state.value != PlaybackState.PAUSED) return
-        audioTrack?.play()
-        _state.value = PlaybackState.PLAYING
+        try {
+            mediaPlayer?.start()
+            _state.value = PlaybackState.PLAYING
+            startProgressUpdate()
+        } catch (e: Exception) {
+            Log.e(TAG, "Resume failed", e)
+        }
     }
 
     fun stop() {
-        isPlaying.set(false)
-        playbackThread?.interrupt()
-        playbackThread = null
-        audioTrack?.stop()
-        pcmQueue.clear()
+        stopProgressUpdate()
+        try {
+            mediaPlayer?.stop()
+            mediaPlayer?.release()
+        } catch (e: Exception) {
+            Log.e(TAG, "Stop failed", e)
+        }
+        mediaPlayer = null
+        // 删除临时文件
+        tempWavFile?.let {
+            try { it.delete() } catch (_: Exception) {}
+        }
+        tempWavFile = null
         _state.value = PlaybackState.STOPPED
         _progress.value = 0f
     }
 
-    /**
-     * 标记流式输入结束。
-     */
-    fun endOfStream() {
-        pcmQueue.offer(ByteArray(0))
-    }
-
     fun release() {
         stop()
-        audioTrack?.release()
-        audioTrack = null
         _state.value = PlaybackState.IDLE
     }
 
     fun setVolume(volume: Float) {
-        audioTrack?.setVolume(volume.coerceIn(0f, 1f))
+        try {
+            mediaPlayer?.setVolume(volume.coerceIn(0f, 1f), volume.coerceIn(0f, 1f))
+        } catch (e: Exception) {
+            Log.e(TAG, "Set volume failed", e)
+        }
     }
 
-    private fun FloatArrayToPCM16(input: FloatArray): ByteArray {
-        val output = ByteArray(input.size * 2)
-        var i = 0
-        var j = 0
-        while (i < input.size) {
-            val sample = (input[i].coerceIn(-1f, 1f) * 32767f).toInt().toShort()
-            output[j++] = sample.toByte()
-            output[j++] = (sample.toInt() shr 8).toByte()
-            i++
+    private fun startProgressUpdate() {
+        stopProgressUpdate()
+        progressRunnable = object : Runnable {
+            override fun run() {
+                try {
+                    mediaPlayer?.let {
+                        if (it.isPlaying && totalDurationMs > 0) {
+                            _progress.value = it.currentPosition.toFloat() / totalDurationMs
+                        }
+                    }
+                    handler.postDelayed(this, 100)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Progress update failed", e)
+                }
+            }
         }
-        return output
+        handler.post(progressRunnable!!)
     }
+
+    private fun stopProgressUpdate() {
+        progressRunnable?.let { handler.removeCallbacks(it) }
+        progressRunnable = null
+    }
+
+    private fun saveWav(pcm: FloatArray, file: File) {
+        val dataSize = pcm.size * 2
+        val buffer = ByteBuffer.allocate(44 + dataSize).order(ByteOrder.LITTLE_ENDIAN)
+
+        // WAV header
+        buffer.put("RIFF".toByteArray())
+        buffer.putInt(36 + dataSize)
+        buffer.put("WAVE".toByteArray())
+        buffer.put("fmt ".toByteArray())
+        buffer.putInt(16)
+        buffer.putShort(1) // PCM
+        buffer.putShort(1) // mono
+        buffer.putInt(sampleRate)
+        buffer.putInt(sampleRate * 2) // byte rate
+        buffer.putShort(2) // block align
+        buffer.putShort(16) // bits per sample
+        buffer.put("data".toByteArray())
+        buffer.putInt(dataSize)
+
+        // PCM data
+        pcm.forEach { sample ->
+            val s = (sample.coerceIn(-1f, 1f) * 32767f).toInt().toShort()
+            buffer.putShort(s)
+        }
+
+        FileOutputStream(file).use { it.write(buffer.array()) }
+    }
+
+    // 保留兼容接口（流式播放已禁用）
+    fun prepare() {}
+    fun write(pcm: FloatArray) {}
+    fun start() {}
+    fun endOfStream() {}
 }

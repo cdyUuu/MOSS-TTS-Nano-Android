@@ -39,7 +39,7 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
     private val clonedVoiceStore = ClonedVoiceStore(application)
     private val historyStore = HistoryStore(application)
 
-    private val audioPlayer = StreamingAudioPlayer(48000)
+    private val audioPlayer = StreamingAudioPlayer(getApplication(), 48000)
 
     // UI 状态
     private val _text = MutableStateFlow("")
@@ -241,6 +241,9 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     audioPlayer.playFull(result.pcm)
                 }
+                // 保存音频文件到永久缓存
+                val audioFile = java.io.File(getApplication<android.app.Application>().filesDir, "tts_${System.currentTimeMillis()}.wav")
+                modelManager.saveWavToPath(result.pcm, audioFile.absolutePath)
                 // 保存到历史记录
                 val voiceName = _referenceAudioName.value.ifEmpty { _selectedVoice.value.ifEmpty { "默认音色" } }
                 val historyItem = SynthesisHistory(
@@ -249,6 +252,7 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
                     voice = voiceName,
                     createdAt = System.currentTimeMillis(),
                     durationMs = (result.pcm.size / 48).toLong(), // 48000Hz / 1000 = 48 samples per ms
+                    audioPath = audioFile.absolutePath,
                 )
                 historyStore.add(historyItem)
                 _history.value = historyStore.getAll()
@@ -334,6 +338,23 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
     fun playFromHistory(text: String) {
         _text.value = text
         synthesizeAndPlay()
+    }
+
+    fun saveHistoryAudio(history: SynthesisHistory): Boolean {
+        return try {
+            if (history.audioPath == null) return false
+            val srcFile = java.io.File(history.audioPath)
+            if (!srcFile.exists()) return false
+            val downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val fileName = "MOSS_TTS_${java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.getDefault()).format(java.util.Date())}.wav"
+            val destFile = java.io.File(downloadDir, fileName)
+            srcFile.copyTo(destFile, overwrite = true)
+            _saveMessage.value = "已保存到 Download/$fileName"
+            true
+        } catch (e: Exception) {
+            _saveMessage.value = "保存失败：${e.message}"
+            false
+        }
     }
 
     fun playHistoryAudio(history: SynthesisHistory) {

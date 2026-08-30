@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -87,9 +89,6 @@ class MainActivity : ComponentActivity() {
         val prefs = getSharedPreferences("mosstts_settings", MODE_PRIVATE)
         val darkMode = prefs.getString("dark_mode_string", "system") ?: "system"
         val hideNav = prefs.getBoolean("hide_navigation_bar", false)
-        if (hideNav) {
-            hideNavigationBar(true)
-        }
 
         setContent {
             var currentDarkMode by remember { mutableStateOf(darkMode) }
@@ -107,24 +106,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        // 延迟应用隐藏导航条设置，确保window已准备好
+        if (hideNav) {
+            window.decorView.post {
+                hideNavigationBar(true)
+            }
+        }
     }
 
     /**
      * 隐藏或显示系统导航条（小横条）。
      */
     private fun hideNavigationBar(hide: Boolean) {
-        val windowInsetsController = WindowCompat.getInsetsController(window, window.decorView)
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
         if (hide) {
             // 隐藏导航条，滑动屏幕边缘可临时显示
-            window.decorView.systemUiVisibility = (
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                    or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            )
+            controller.hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+            controller.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         } else {
             // 恢复默认
-            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+            controller.show(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
         }
     }
 
@@ -160,6 +162,7 @@ fun MainScreen(onHideNavigationBarChanged: ((Boolean) -> Unit)? = null) {
     val navController = rememberNavController()
     val ttsViewModel: TTSViewModel = viewModel()
     val modelViewModel: ModelViewModel = viewModel()
+    var pendingText by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -168,7 +171,8 @@ fun MainScreen(onHideNavigationBarChanged: ((Boolean) -> Unit)? = null) {
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
-                )
+                ),
+                modifier = Modifier.statusBarsPadding(),
             )
         },
         bottomBar = {
@@ -203,7 +207,9 @@ fun MainScreen(onHideNavigationBarChanged: ((Boolean) -> Unit)? = null) {
                 NavigationBar(
                     containerColor = Color.Transparent,
                     tonalElevation = 0.dp,
-                    modifier = Modifier.padding(top = 1.dp),
+                    modifier = Modifier
+                        .navigationBarsPadding()
+                        .padding(top = 1.dp),
                 ) {
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentDestination = navBackStackEntry?.destination
@@ -238,13 +244,30 @@ fun MainScreen(onHideNavigationBarChanged: ((Boolean) -> Unit)? = null) {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable(Screen.Home.route) {
-                HomeScreen(ttsViewModel = ttsViewModel, modelViewModel = modelViewModel)
+                HomeScreen(
+                    ttsViewModel = ttsViewModel,
+                    modelViewModel = modelViewModel,
+                    pendingText = pendingText,
+                    onPendingTextConsumed = { pendingText = null },
+                )
             }
             composable(Screen.Voice.route) {
                 VoiceCloneScreen(ttsViewModel = ttsViewModel)
             }
             composable(Screen.History.route) {
-                HistoryScreen(ttsViewModel = ttsViewModel)
+                HistoryScreen(
+                    ttsViewModel = ttsViewModel,
+                    onNavigateToHome = { text ->
+                        pendingText = text
+                        navController.navigate(Screen.Home.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
             composable(Screen.Models.route) {
                 ModelsScreen(modelViewModel = modelViewModel, ttsViewModel = ttsViewModel)

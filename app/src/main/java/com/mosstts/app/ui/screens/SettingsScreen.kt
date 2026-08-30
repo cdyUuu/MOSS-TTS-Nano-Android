@@ -311,29 +311,40 @@ fun SettingsScreen(
                             updateMessage = null
                             scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                 try {
-                                    val url = java.net.URL("https://api.github.com/repos/cdyUuu/MOSS-TTS-Nano-Android/releases/latest")
+                                    // 使用 GitHub Atom Feed，无API限流
+                                    val url = java.net.URL("https://github.com/cdyUuu/MOSS-TTS-Nano-Android/releases.atom")
                                     val conn = url.openConnection() as java.net.HttpURLConnection
                                     conn.connectTimeout = 10000
                                     conn.readTimeout = 10000
-                                    conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
                                     conn.setRequestProperty("User-Agent", "MOSS-TTS-Android/1.0")
                                     val responseCode = conn.responseCode
-                                    if (responseCode == 403) {
-                                        withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                            updateMessage = "GitHub API限流，请稍后重试"
-                                        }
-                                    } else if (responseCode != 200) {
+                                    if (responseCode != 200) {
                                         withContext(kotlinx.coroutines.Dispatchers.Main) {
                                             updateMessage = "检查更新失败：HTTP $responseCode"
                                         }
                                     } else {
                                         val response = conn.inputStream.bufferedReader().readText()
-                                        val json = org.json.JSONObject(response)
-                                        latestVersion = json.getString("tag_name")
+                                        // 解析Atom XML，提取第一个entry的title（最新版本号）
+                                        val entryStart = response.indexOf("<entry>")
+                                        val titleStart = response.indexOf("<title>", entryStart) + 7
+                                        val titleEnd = response.indexOf("</title>", titleStart)
+                                        val parsedVersion = response.substring(titleStart, titleEnd).trim()
+                                        latestVersion = parsedVersion
                                         val current = packageInfo.versionName
+                                        // 解析版本号数字进行比较
+                                        val remoteParts = parsedVersion.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
+                                        val currentParts = current.split(".").map { it.toIntOrNull() ?: 0 }
+                                        var isNewer = false
+                                        for (i in 0 until maxOf(remoteParts.size, currentParts.size)) {
+                                            val r = remoteParts.getOrElse(i) { 0 }
+                                            val c = currentParts.getOrElse(i) { 0 }
+                                            if (r > c) { isNewer = true; break }
+                                            if (r < c) { break }
+                                        }
+                                        val versionStr = parsedVersion
                                         withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                            if (latestVersion != "v$current") {
-                                                updateMessage = "发现新版本：$latestVersion，点击下载"
+                                            if (isNewer) {
+                                                updateMessage = "发现新版本：$versionStr，点击下载"
                                             } else {
                                                 updateMessage = "已是最新版本"
                                             }
@@ -426,4 +437,20 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
     }
+
+}
+
+/**
+ * 比较两个版本号大小，返回正数表示v1>v2，负数表示v1<v2，0表示相等
+ */
+fun compareVersions(v1: String, v2: String): Int {
+    val parts1 = v1.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
+    val parts2 = v2.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
+    val maxLen = maxOf(parts1.size, parts2.size)
+    for (i in 0 until maxLen) {
+        val p1 = parts1.getOrElse(i) { 0 }
+        val p2 = parts2.getOrElse(i) { 0 }
+        if (p1 != p2) return p1 - p2
+    }
+    return 0
 }

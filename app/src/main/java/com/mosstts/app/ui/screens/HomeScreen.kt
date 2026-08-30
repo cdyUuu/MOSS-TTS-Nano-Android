@@ -81,7 +81,20 @@ import com.mosstts.app.viewmodel.TTSViewModel
 fun HomeScreen(
     ttsViewModel: TTSViewModel,
     modelViewModel: ModelViewModel,
+    pendingText: String? = null,
+    onPendingTextConsumed: () -> Unit = {},
 ) {
+    // 处理从历史记录跳转过来的待合成文本
+    LaunchedEffect(pendingText) {
+        pendingText?.let { text ->
+            ttsViewModel.updateText(text)
+            onPendingTextConsumed()
+            // 延迟一下确保文本设置完成
+            kotlinx.coroutines.delay(100)
+            ttsViewModel.synthesizeAndPlay()
+        }
+    }
+
     val text by ttsViewModel.text.collectAsState()
     val voices by ttsViewModel.voices.collectAsState()
     val selectedVoice by ttsViewModel.selectedVoice.collectAsState()
