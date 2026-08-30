@@ -139,15 +139,18 @@ class StreamingAudioPlayer(
                         }
                     }
                 }
-                // 等待 AudioTrack 播放完缓冲区
+                // 等待 AudioTrack 播放完缓冲区（暂停时继续等待，不退出）
                 audioTrack?.let {
-                    while (it.playState == AudioTrack.PLAYSTATE_PLAYING &&
-                        it.playbackHeadPosition < totalSamples
-                    ) {
-                        Thread.sleep(10)
+                    while (isPlaying.get() && it.playbackHeadPosition < totalSamples) {
+                        playedSamples = it.playbackHeadPosition.toLong()
+                        if (totalSamples > 0) {
+                            _progress.value = playedSamples.toFloat() / totalSamples
+                        }
+                        Thread.sleep(50)
                     }
                 }
                 if (isPlaying.get()) {
+                    _progress.value = 1f
                     _state.value = PlaybackState.COMPLETED
                 }
             } catch (e: InterruptedException) {
@@ -163,8 +166,7 @@ class StreamingAudioPlayer(
     }
 
     fun pause() {
-        if (!isPlaying.get()) return
-        isPlaying.set(false)
+        if (_state.value != PlaybackState.PLAYING) return
         audioTrack?.pause()
         _state.value = PlaybackState.PAUSED
     }
@@ -175,35 +177,8 @@ class StreamingAudioPlayer(
             return
         }
         if (_state.value != PlaybackState.PAUSED) return
-        isPlaying.set(true)
         audioTrack?.play()
         _state.value = PlaybackState.PLAYING
-        // 启动等待线程，检测播放完成（数据已在AudioTrack缓冲区中，无需从队列读取）
-        playbackThread = Thread({
-            try {
-                audioTrack?.let {
-                    while (isPlaying.get() &&
-                        it.playState == AudioTrack.PLAYSTATE_PLAYING &&
-                        it.playbackHeadPosition < totalSamples
-                    ) {
-                        playedSamples = it.playbackHeadPosition.toLong()
-                        if (totalSamples > 0) {
-                            _progress.value = playedSamples.toFloat() / totalSamples
-                        }
-                        Thread.sleep(50)
-                    }
-                }
-                if (isPlaying.get()) {
-                    _progress.value = 1f
-                    _state.value = PlaybackState.COMPLETED
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Resume playback error", e)
-            } finally {
-                isPlaying.set(false)
-            }
-        }, "AudioResume").apply { isDaemon = true }
-        playbackThread?.start()
     }
 
     fun stop() {

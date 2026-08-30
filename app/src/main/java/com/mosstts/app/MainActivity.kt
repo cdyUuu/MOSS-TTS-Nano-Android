@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
@@ -51,6 +52,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.mosstts.app.ui.screens.HistoryScreen
 import com.mosstts.app.ui.screens.HomeScreen
 import com.mosstts.app.ui.screens.ModelsScreen
 import com.mosstts.app.ui.screens.SettingsScreen
@@ -62,11 +64,12 @@ import com.mosstts.app.viewmodel.TTSViewModel
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Home : Screen("home", "语音合成", Icons.Default.Headphones)
     data object Voice : Screen("voice", "音色克隆", Icons.Default.Mic)
+    data object History : Screen("history", "历史记录", Icons.Default.Menu)
     data object Models : Screen("models", "模型管理", Icons.Default.Storage)
     data object Settings : Screen("settings", "设置", Icons.Default.Settings)
 }
 
-val screens = listOf(Screen.Home, Screen.Voice, Screen.Models, Screen.Settings)
+val screens = listOf(Screen.Home, Screen.Voice, Screen.History, Screen.Models, Screen.Settings)
 
 class MainActivity : ComponentActivity() {
 
@@ -239,6 +242,9 @@ fun MainScreen(onHideNavigationBarChanged: ((Boolean) -> Unit)? = null) {
             }
             composable(Screen.Voice.route) {
                 VoiceCloneScreen(ttsViewModel = ttsViewModel)
+            }
+            composable(Screen.History.route) {
+                HistoryScreen(ttsViewModel = ttsViewModel)
             }
             composable(Screen.Models.route) {
                 ModelsScreen(modelViewModel = modelViewModel, ttsViewModel = ttsViewModel)

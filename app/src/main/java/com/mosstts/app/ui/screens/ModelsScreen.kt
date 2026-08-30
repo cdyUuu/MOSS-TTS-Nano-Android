@@ -481,9 +481,7 @@ fun ModelsScreen(
                 Text("1. 首次使用需下载模型文件（约 700MB），建议在 WiFi 环境下下载", style = MaterialTheme.typography.bodySmall)
                 Text("2. 下载使用前台服务，可在通知栏暂停/继续，防止被系统杀死", style = MaterialTheme.typography.bodySmall)
                 Text("3. 下载完成后引擎会自动加载，返回「合成」页面即可使用", style = MaterialTheme.typography.bodySmall)
-                Text("4. 语音克隆功能需要额外下载编码模型（可选）", style = MaterialTheme.typography.bodySmall)
-                Text("5. 如果引擎加载失败，请查看日志页面获取详细错误信息", style = MaterialTheme.typography.bodySmall)
-                Text("6. 建议在设置中关闭电池优化，以获得更稳定的后台下载", style = MaterialTheme.typography.bodySmall)
+                Text("4. 建议在设置中关闭电池优化，以获得更稳定的后台下载", style = MaterialTheme.typography.bodySmall)
             }
         }
 

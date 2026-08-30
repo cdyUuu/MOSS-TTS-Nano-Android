@@ -190,6 +190,41 @@ class ModelManager(private val context: Context) {
         }
     }
 
+    fun loadWav(filePath: String): FloatArray? {
+        return try {
+            val file = File(filePath)
+            if (!file.exists()) return null
+            java.io.FileInputStream(file).use { fis ->
+                val header = ByteArray(44)
+                fis.read(header)
+                val sampleRate = java.nio.ByteBuffer.wrap(header, 24, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int
+                val bitsPerSample = java.nio.ByteBuffer.wrap(header, 34, 2).order(java.nio.ByteOrder.LITTLE_ENDIAN).short.toInt()
+                val channels = java.nio.ByteBuffer.wrap(header, 22, 2).order(java.nio.ByteOrder.LITTLE_ENDIAN).short.toInt()
+                val dataSize = java.nio.ByteBuffer.wrap(header, 40, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int
+                val rawData = ByteArray(dataSize)
+                fis.read(rawData)
+                if (bitsPerSample == 16) {
+                    val shortCount = rawData.size / 2
+                    if (channels == 2) {
+                        FloatArray(shortCount / 2) { i ->
+                            val left = (rawData[i * 4].toInt() and 0xFF or (rawData[i * 4 + 1].toInt() shl 8)).toShort()
+                            val right = (rawData[i * 4 + 2].toInt() and 0xFF or (rawData[i * 4 + 3].toInt() shl 8)).toShort()
+                            ((left + right) / 2f) / 32768f
+                        }
+                    } else {
+                        FloatArray(shortCount) { i ->
+                            val sample = (rawData[i * 2].toInt() and 0xFF or (rawData[i * 2 + 1].toInt() shl 8)).toShort()
+                            sample / 32768f
+                        }
+                    }
+                } else null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load WAV", e)
+            null
+        }
+    }
+
     fun release() {
         try {
             engine?.close()

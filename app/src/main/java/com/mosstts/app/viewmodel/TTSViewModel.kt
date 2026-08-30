@@ -296,11 +296,37 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteHistory(id: String) {
+        // 删除关联的音频文件
+        historyStore.getAll().find { it.id == id }?.audioPath?.let { path ->
+            try {
+                java.io.File(path).delete()
+            } catch (_: Exception) {}
+        }
         historyStore.delete(id)
         _history.value = historyStore.getAll()
     }
 
+    fun deleteHistories(ids: List<String>) {
+        ids.forEach { id ->
+            historyStore.getAll().find { it.id == id }?.audioPath?.let { path ->
+                try {
+                    java.io.File(path).delete()
+                } catch (_: Exception) {}
+            }
+        }
+        ids.forEach { historyStore.delete(it) }
+        _history.value = historyStore.getAll()
+    }
+
     fun clearHistory() {
+        // 删除所有音频文件
+        historyStore.getAll().forEach { item ->
+            item.audioPath?.let { path ->
+                try {
+                    java.io.File(path).delete()
+                } catch (_: Exception) {}
+            }
+        }
         historyStore.clear()
         _history.value = emptyList()
     }
@@ -308,6 +334,31 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
     fun playFromHistory(text: String) {
         _text.value = text
         synthesizeAndPlay()
+    }
+
+    fun playHistoryAudio(history: SynthesisHistory) {
+        if (history.audioPath != null && java.io.File(history.audioPath).exists()) {
+            // 从缓存文件播放，不需要重新合成
+            val pcm = modelManager.loadWav(history.audioPath)
+            if (pcm != null) {
+                _lastResult.value = SynthesisResult(
+                    pcm = pcm,
+                    sampleRate = 48000,
+                    channels = 1,
+                    generatedFrames = pcm.size,
+                    durationMs = (pcm.size / 48).toLong(),
+                    elapsedMs = 0,
+                    textChunks = emptyList(),
+                )
+                audioPlayer.playFull(pcm)
+            } else {
+                // 文件不存在，重新合成
+                playFromHistory(history.text)
+            }
+        } else {
+            // 没有缓存，重新合成
+            playFromHistory(history.text)
+        }
     }
 
     fun clearError() {

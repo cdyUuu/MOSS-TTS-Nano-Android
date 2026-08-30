@@ -90,7 +90,6 @@ fun HomeScreen(
     val isSynthesizing by ttsViewModel.isSynthesizing.collectAsState()
     val isPlaying by ttsViewModel.isPlaying.collectAsState()
     val saveMessage by ttsViewModel.saveMessage.collectAsState()
-    val history by ttsViewModel.history.collectAsState()
     var showHistory by remember { mutableStateOf(false) }
     val synthesisProgress by ttsViewModel.synthesisProgress.collectAsState()
     val playbackProgress by ttsViewModel.playbackProgress.collectAsState()
@@ -510,75 +509,6 @@ fun HomeScreen(
                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("开始合成", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 合成历史
-        if (history.isNotEmpty()) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("合成历史", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text("${history.size} 条", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        IconButton(onClick = { showHistory = !showHistory }) {
-                            Icon(if (showHistory) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = "展开/收起")
-                        }
-                    }
-                    if (showHistory) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        history.take(10).forEach { item ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp)
-                                    .clickable { ttsViewModel.playFromHistory(item.text) },
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                                shape = RoundedCornerShape(12.dp),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            item.text.take(50) + if (item.text.length > 50) "..." else "",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            maxLines = 1,
-                                        )
-                                        Text(
-                                            "${item.voice} · ${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(item.createdAt))} · ${item.durationMs / 1000}s",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    IconButton(onClick = { ttsViewModel.deleteHistory(item.id) }) {
-                                        Icon(Icons.Default.Close, contentDescription = "删除", modifier = Modifier.size(16.dp))
-                                    }
-                                }
-                            }
-                        }
-                        if (history.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            TextButton(onClick = { ttsViewModel.clearHistory() }) {
-                                Text("清空历史")
-                            }
-                        }
-                    }
-                }
             }
         }
 

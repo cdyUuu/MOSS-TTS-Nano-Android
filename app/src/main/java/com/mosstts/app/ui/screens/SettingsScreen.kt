@@ -316,9 +316,13 @@ fun SettingsScreen(
                                     conn.connectTimeout = 10000
                                     conn.readTimeout = 10000
                                     conn.setRequestProperty("Accept", "application/vnd.github.v3+json")
-                                    conn.setRequestProperty("User-Agent", "MOSS-TTS-Android")
+                                    conn.setRequestProperty("User-Agent", "MOSS-TTS-Android/1.0")
                                     val responseCode = conn.responseCode
-                                    if (responseCode != 200) {
+                                    if (responseCode == 403) {
+                                        withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            updateMessage = "GitHub API限流，请稍后重试"
+                                        }
+                                    } else if (responseCode != 200) {
                                         withContext(kotlinx.coroutines.Dispatchers.Main) {
                                             updateMessage = "检查更新失败：HTTP $responseCode"
                                         }
