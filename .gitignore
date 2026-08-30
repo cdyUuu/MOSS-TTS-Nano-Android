@@ -57,9 +57,8 @@ captures/
 .idea/modules/
 .idea/scopes/
 
-# Keystore files
+# Keystore files (included for CI build)
 *.jks
-*.keystore
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild
