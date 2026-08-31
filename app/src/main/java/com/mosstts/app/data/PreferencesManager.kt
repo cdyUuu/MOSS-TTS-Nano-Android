@@ -21,6 +21,7 @@ data class AppSettings(
     val hideNavigationBar: Boolean = false,
     val referenceAudioPath: String = "",
     val referenceAudioName: String = "",
+    val language: String = "system",
 )
 
 class PreferencesManager(private val context: Context) {
@@ -35,6 +36,7 @@ class PreferencesManager(private val context: Context) {
         private val KEY_HIDE_NAV_BAR = booleanPreferencesKey("hide_navigation_bar")
         private val KEY_REFERENCE_AUDIO_PATH = stringPreferencesKey("reference_audio_path")
         private val KEY_REFERENCE_AUDIO_NAME = stringPreferencesKey("reference_audio_name")
+        private val KEY_LANGUAGE = stringPreferencesKey("app_language")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -48,6 +50,7 @@ class PreferencesManager(private val context: Context) {
             hideNavigationBar = prefs[KEY_HIDE_NAV_BAR] ?: false,
             referenceAudioPath = prefs[KEY_REFERENCE_AUDIO_PATH] ?: "",
             referenceAudioName = prefs[KEY_REFERENCE_AUDIO_NAME] ?: "",
+            language = prefs[KEY_LANGUAGE] ?: "system",
         )
     }
 
@@ -60,6 +63,7 @@ class PreferencesManager(private val context: Context) {
     val hideNavigationBar: Flow<Boolean> = context.dataStore.data.map { it[KEY_HIDE_NAV_BAR] ?: false }
     val referenceAudioPath: Flow<String> = context.dataStore.data.map { it[KEY_REFERENCE_AUDIO_PATH] ?: "" }
     val referenceAudioName: Flow<String> = context.dataStore.data.map { it[KEY_REFERENCE_AUDIO_NAME] ?: "" }
+    val language: Flow<String> = context.dataStore.data.map { it[KEY_LANGUAGE] ?: "system" }
 
     suspend fun setSelectedVoice(voice: String) {
         context.dataStore.edit { it[KEY_SELECTED_VOICE] = voice }
@@ -101,5 +105,9 @@ class PreferencesManager(private val context: Context) {
             it.remove(KEY_REFERENCE_AUDIO_PATH)
             it.remove(KEY_REFERENCE_AUDIO_NAME)
         }
+    }
+
+    suspend fun setLanguage(language: String) {
+        context.dataStore.edit { it[KEY_LANGUAGE] = language }
     }
 }

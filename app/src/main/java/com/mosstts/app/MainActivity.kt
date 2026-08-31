@@ -1,12 +1,14 @@
 package com.mosstts.app
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.background
@@ -33,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,12 +66,12 @@ import com.mosstts.app.ui.theme.MossTTSTheme
 import com.mosstts.app.viewmodel.ModelViewModel
 import com.mosstts.app.viewmodel.TTSViewModel
 
-sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    data object Home : Screen("home", "语音合成", Icons.Default.Headphones)
-    data object Voice : Screen("voice", "音色克隆", Icons.Default.Mic)
-    data object History : Screen("history", "历史记录", Icons.Default.Menu)
-    data object Models : Screen("models", "模型管理", Icons.Default.Storage)
-    data object Settings : Screen("settings", "设置", Icons.Default.Settings)
+sealed class Screen(val route: String, val titleRes: Int, val icon: ImageVector) {
+    data object Home : Screen("home", R.string.nav_home, Icons.Default.Headphones)
+    data object Voice : Screen("voice", R.string.nav_voice, Icons.Default.Mic)
+    data object History : Screen("history", R.string.nav_history, Icons.Default.Menu)
+    data object Models : Screen("models", R.string.nav_models, Icons.Default.Storage)
+    data object Settings : Screen("settings", R.string.nav_settings, Icons.Default.Settings)
 }
 
 val screens = listOf(Screen.Home, Screen.Voice, Screen.History, Screen.Models, Screen.Settings)
@@ -79,26 +82,53 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { /* 权限结果处理 */ }
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(MossTTSApp.wrapContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // 启用 edge-to-edge 显示
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        // 状态栏和导航栏完全透明，让内容延伸到摄像头区域
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
         requestNeededPermissions()
 
         // 读取偏好设置
         val prefs = getSharedPreferences("mosstts_settings", MODE_PRIVATE)
         val darkMode = prefs.getString("dark_mode_string", "system") ?: "system"
-        val hideNav = prefs.getBoolean("hide_navigation_bar", false)
 
         setContent {
             var currentDarkMode by remember { mutableStateOf(darkMode) }
+            var hideNav by remember { mutableStateOf(false) }
             // 监听设置变化
             LaunchedEffect(Unit) {
                 (application as MossTTSApp).preferences.darkMode.collect {
                     currentDarkMode = it
                 }
             }
+            // 监听隐藏导航条设置变化
+            LaunchedEffect(Unit) {
+                (application as MossTTSApp).preferences.hideNavigationBar.collect { hide ->
+                    hideNav = hide
+                    window.decorView.post {
+                        hideNavigationBar(hide)
+                    }
+                }
+            }
             MossTTSTheme(darkMode = currentDarkMode) {
+                // 根据主题设置状态栏图标颜色
+                val isDark = when (currentDarkMode) {
+                    "dark" -> true
+                    "light" -> false
+                    else -> isSystemInDarkTheme()
+                }
+                LaunchedEffect(isDark) {
+                    val controller = WindowCompat.getInsetsController(window, window.decorView)
+                    controller.isAppearanceLightStatusBars = !isDark
+                    controller.isAppearanceLightNavigationBars = !isDark
+                }
                 Surface(color = MaterialTheme.colorScheme.background) {
                     MainScreen(onHideNavigationBarChanged = { hide ->
                         hideNavigationBar(hide)
@@ -107,12 +137,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 延迟应用隐藏导航条设置，确保window已准备好
-        if (hideNav) {
-            window.decorView.post {
-                hideNavigationBar(true)
-            }
-        }
     }
 
     /**
@@ -172,7 +196,7 @@ fun MainScreen(onHideNavigationBarChanged: ((Boolean) -> Unit)? = null) {
                     containerColor = MaterialTheme.colorScheme.surface,
                     titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
-                modifier = Modifier.statusBarsPadding(),
+                windowInsets = TopAppBarDefaults.windowInsets,
             )
         },
         bottomBar = {
@@ -215,8 +239,8 @@ fun MainScreen(onHideNavigationBarChanged: ((Boolean) -> Unit)? = null) {
                     val currentDestination = navBackStackEntry?.destination
                     screens.forEach { screen ->
                         NavigationBarItem(
-                            icon = { Icon(screen.icon, contentDescription = screen.title) },
-                            label = { Text(screen.title, style = MaterialTheme.typography.labelSmall) },
+                            icon = { Icon(screen.icon, contentDescription = stringResource(screen.titleRes)) },
+                            label = { Text(stringResource(screen.titleRes), style = MaterialTheme.typography.labelSmall) },
                             selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                             onClick = {
                                 navController.navigate(screen.route) {

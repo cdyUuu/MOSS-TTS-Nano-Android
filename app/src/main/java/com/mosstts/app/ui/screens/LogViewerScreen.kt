@@ -1,5 +1,7 @@
 package com.mosstts.app.ui.screens
 
+import com.mosstts.app.R
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,6 +45,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -72,7 +75,7 @@ fun LogViewerScreen(
         crashText = if (crashFile?.exists() == true) {
             crashFile.readText()
         } else {
-            "暂无崩溃记录"
+            context.getString(R.string.log_no_crash)
         }
     }
 
@@ -102,10 +105,10 @@ fun LogViewerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("日志查看", fontWeight = FontWeight.Bold) },
+                title = { Text(stringResource(R.string.log_title), fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = stringResource(R.string.cd_back))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -114,19 +117,19 @@ fun LogViewerScreen(
                 ),
                 actions = {
                     IconButton(onClick = { refreshLogs() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                        Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.cd_refresh))
                     }
                     IconButton(onClick = {
                         AppLogger.clearLogs()
                         refreshLogs()
                     }) {
-                        Icon(Icons.Default.Clear, contentDescription = "清除日志")
+                        Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.cd_clear_log))
                     }
                     IconButton(onClick = {
                         AppLogger.clearCrashes()
                         loadCrashes()
                     }) {
-                        Icon(Icons.Default.Delete, contentDescription = "清除崩溃")
+                        Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.cd_clear_crash))
                     }
                 },
             )
@@ -148,13 +151,13 @@ fun LogViewerScreen(
                     onClick = { showCrashes = false },
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("运行日志 (${logs.size})")
+                    Text(stringResource(R.string.log_runtime) + " (${logs.size})")
                 }
                 OutlinedButton(
                     onClick = { showCrashes = true },
                     modifier = Modifier.weight(1f),
                 ) {
-                    Text("崩溃记录")
+                    Text(stringResource(R.string.log_crash))
                 }
             }
 
@@ -184,7 +187,7 @@ fun LogViewerScreen(
                                 intent.type = "text/plain"
                                 intent.putExtra(android.content.Intent.EXTRA_STREAM, uri)
                                 intent.addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                context.startActivity(android.content.Intent.createChooser(intent, "分享日志"))
+                                context.startActivity(android.content.Intent.createChooser(intent, context.getString(R.string.log_share)))
                             } catch (e: Exception) {
                                 AppLogger.error("LogViewer", "导出日志失败", e)
                             } finally {
@@ -198,11 +201,11 @@ fun LogViewerScreen(
                     if (isExporting) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("导出中...")
+                        Text(stringResource(R.string.log_exporting))
                     } else {
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("导出/分享")
+                        Text(stringResource(R.string.log_export_share))
                     }
                 }
             }

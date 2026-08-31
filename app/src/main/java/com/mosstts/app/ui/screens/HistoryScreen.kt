@@ -1,5 +1,7 @@
 package com.mosstts.app.ui.screens
 
+import com.mosstts.app.R
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -39,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mosstts.app.data.SynthesisHistory
@@ -82,9 +85,9 @@ fun HistoryScreen(
         ) {
             Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             Spacer(modifier = Modifier.width(8.dp))
-            Text("合成历史", style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text(stringResource(R.string.history_title), style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
             Spacer(modifier = Modifier.weight(1f))
-            Text("${history.size} 条", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.history_count, history.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         // 操作栏
@@ -104,13 +107,13 @@ fun HistoryScreen(
                 ) {
                     Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("删除选中(${selectedIds.size})")
+                    Text(stringResource(R.string.history_delete_selected).replace("%d", "${selectedIds.size}"))
                 }
                 OutlinedButton(
                     onClick = { showClearConfirm = true },
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text("清空全部")
+                    Text(stringResource(R.string.history_clear_all))
                 }
             }
         }
@@ -129,9 +132,9 @@ fun HistoryScreen(
                 ) {
                     Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("暂无合成历史", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.history_empty), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("合成的语音会自动保存到这里", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.history_empty_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -202,7 +205,7 @@ fun HistoryScreen(
                         }) {
                             Icon(
                                 if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                contentDescription = if (isPlaying) "暂停" else "播放",
+                                contentDescription = if (isPlaying) stringResource(R.string.cd_pause) else stringResource(R.string.cd_play),
                                 tint = MaterialTheme.colorScheme.primary,
                             )
                         }
@@ -225,7 +228,7 @@ fun HistoryScreen(
                             ttsViewModel.stopPlayback()
                             currentPlayingItem = null
                         }) {
-                            Icon(Icons.Default.Delete, contentDescription = "关闭", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.cd_close), modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -237,8 +240,8 @@ fun HistoryScreen(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("确认删除") },
-            text = { Text("确定要删除选中的 ${selectedIds.size} 条历史记录吗？") },
+            title = { Text(stringResource(R.string.dialog_confirm_delete)) },
+            text = { Text(stringResource(R.string.dialog_delete_selected_confirm, selectedIds.size)) },
             confirmButton = {
                 TextButton(onClick = {
                     // 如果删除的是当前播放的，停止播放
@@ -250,12 +253,12 @@ fun HistoryScreen(
                     selectedIds = emptySet()
                     showDeleteConfirm = false
                 }) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -265,8 +268,8 @@ fun HistoryScreen(
     if (showClearConfirm) {
         AlertDialog(
             onDismissRequest = { showClearConfirm = false },
-            title = { Text("确认清空") },
-            text = { Text("确定要清空所有历史记录吗？此操作不可恢复。") },
+            title = { Text(stringResource(R.string.dialog_confirm_clear)) },
+            text = { Text(stringResource(R.string.dialog_clear_all_confirm)) },
             confirmButton = {
                 TextButton(onClick = {
                     ttsViewModel.stopPlayback()
@@ -275,12 +278,12 @@ fun HistoryScreen(
                     selectedIds = emptySet()
                     showClearConfirm = false
                 }) {
-                    Text("清空", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.action_clear), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirm = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -331,20 +334,20 @@ fun HistoryItem(
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     "${item.voice} · ${SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(item.createdAt))} · ${item.durationMs / 1000}s" +
-                        if (hasCache) " · 已缓存" else " · 未缓存",
+                        if (hasCache) stringResource(R.string.history_cached_dot) else stringResource(R.string.history_not_cached_dot),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (hasCache) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (hasCache) {
                 IconButton(onClick = onSave) {
-                    Icon(Icons.Default.Save, contentDescription = "保存", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Save, contentDescription = stringResource(R.string.cd_save), tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                 }
             }
             IconButton(onClick = onPlay) {
                 Icon(
                     if (isCurrentPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (hasCache) "播放" else "去合成",
+                    contentDescription = if (hasCache) stringResource(R.string.cd_play) else stringResource(R.string.history_go_synthesize),
                     tint = MaterialTheme.colorScheme.primary,
                 )
             }

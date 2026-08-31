@@ -1,10 +1,14 @@
 package com.mosstts.app.ui.screens
 
+import com.mosstts.app.R
+
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,20 +25,25 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatteryStd
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -51,6 +60,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -71,6 +81,14 @@ fun SettingsScreen(
     var playbackSpeed by remember { mutableStateOf(preferences.playbackSpeed) }
     var darkMode by remember { mutableStateOf(preferences.darkMode) }
     var hideNavigationBar by remember { mutableStateOf(preferences.hideNavigationBar) }
+    var appLanguage by remember {
+        mutableStateOf(
+            context.getSharedPreferences("mosstts_settings", Context.MODE_PRIVATE)
+                .getString("app_language", "system") ?: "system"
+        )
+    }
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    var tempLanguage by remember { mutableStateOf("system") }
     var isBatteryOptimized by remember { mutableStateOf(false) }
     var isCheckingUpdate by remember { mutableStateOf(false) }
     var latestVersion by remember { mutableStateOf<String?>(null) }
@@ -78,7 +96,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
 
     val speedOptions = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
-    val darkModeOptions = listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色")
+    val darkModeOptions = listOf("system" to stringResource(R.string.settings_dark_system), "light" to stringResource(R.string.settings_dark_light), "dark" to stringResource(R.string.settings_dark_dark))
 
     LaunchedEffect(Unit) {
         ttsViewModel.preferences.settings.collect {
@@ -122,12 +140,12 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.DarkMode, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("外观", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_appearance), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 深色模式
-                Text("主题模式", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.settings_theme_mode), style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     darkModeOptions.forEach { (value, label) ->
@@ -163,8 +181,8 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
-                            Text("隐藏导航条", style = MaterialTheme.typography.bodyMedium)
-                            Text("沉浸式全屏，滑动边缘可显示", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(stringResource(R.string.settings_hide_nav), style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.settings_hide_nav_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Switch(
@@ -175,6 +193,36 @@ fun SettingsScreen(
                             onHideNavigationBarChanged?.invoke(checked)
                         },
                     )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                // 语言选择
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            tempLanguage = appLanguage
+                            showLanguageDialog = true
+                        },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Default.Language, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                when (appLanguage) {
+                                    "zh" -> stringResource(R.string.settings_language_chinese)
+                                    "en" -> "English"
+                                    else -> stringResource(R.string.settings_language_system)
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -189,18 +237,18 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.BatteryStd, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("电池优化", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_battery), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    if (isBatteryOptimized) "当前应用受电池优化限制，后台下载可能被系统终止" else "应用已加入电池优化白名单，后台下载更稳定",
+                    if (isBatteryOptimized) stringResource(R.string.settings_battery_optimized) else stringResource(R.string.settings_battery_whitelist),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isBatteryOptimized) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 if (isBatteryOptimized) {
                     OutlinedButton(onClick = { requestBatteryOptimization() }) {
-                        Text("关闭电池优化")
+                        Text(stringResource(R.string.settings_disable_battery))
                     }
                 }
             }
@@ -216,11 +264,11 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Memory, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("推理设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_inference), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text("CPU 线程数: ${cpuThreads.toInt()}", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.settings_cpu_threads) + ": ${cpuThreads.toInt()}", style = MaterialTheme.typography.bodyMedium)
                 Slider(
                     value = cpuThreads,
                     onValueChange = { cpuThreads = it },
@@ -230,7 +278,7 @@ fun SettingsScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Text("最大生成帧数: ${maxFrames.toInt()} (约 ${(maxFrames / 12.5).toInt()} 秒)", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.settings_max_frames_detail, maxFrames.toInt(), (maxFrames / 12.5).toInt()), style = MaterialTheme.typography.bodyMedium)
                 Slider(
                     value = maxFrames,
                     onValueChange = { maxFrames = it },
@@ -253,11 +301,11 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("播放设置", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_playback), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text("播放速度", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.settings_playback_speed), style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     speedOptions.forEach { speed ->
@@ -289,18 +337,18 @@ fun SettingsScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("关于", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.settings_about), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text("MOSS TTS Nano", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Android 客户端", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.settings_about_subtitle), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val context = LocalContext.current
                 val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
                 Row {
-                    Text("版本号：", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.settings_version) + ": ", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("${packageInfo.versionName} (${packageInfo.longVersionCode})", style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -314,13 +362,13 @@ fun SettingsScreen(
                                     // 使用 GitHub Atom Feed，无API限流
                                     val url = java.net.URL("https://github.com/cdyUuu/MOSS-TTS-Nano-Android/releases.atom")
                                     val conn = url.openConnection() as java.net.HttpURLConnection
-                                    conn.connectTimeout = 10000
-                                    conn.readTimeout = 10000
+                                    conn.connectTimeout = 20000
+                                    conn.readTimeout = 20000
                                     conn.setRequestProperty("User-Agent", "MOSS-TTS-Android/1.0")
                                     val responseCode = conn.responseCode
                                     if (responseCode != 200) {
                                         withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                            updateMessage = "检查更新失败：HTTP $responseCode"
+                                            updateMessage = context.getString(R.string.about_update_failed) + ": HTTP $responseCode"
                                         }
                                     } else {
                                         val response = conn.inputStream.bufferedReader().readText()
@@ -344,15 +392,15 @@ fun SettingsScreen(
                                         val versionStr = parsedVersion
                                         withContext(kotlinx.coroutines.Dispatchers.Main) {
                                             if (isNewer) {
-                                                updateMessage = "发现新版本：$versionStr，点击下载"
+                                                updateMessage = context.getString(R.string.about_new_version) + ": $versionStr"
                                             } else {
-                                                updateMessage = "已是最新版本"
+                                                updateMessage = context.getString(R.string.about_latest)
                                             }
                                         }
                                     }
                                 } catch (e: Exception) {
                                     withContext(kotlinx.coroutines.Dispatchers.Main) {
-                                        updateMessage = "检查更新失败：${e.message ?: "网络错误"}"
+                                        updateMessage = context.getString(R.string.about_update_failed) + ": ${e.message ?: "Network error"}"
                                     }
                                 } finally {
                                     withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -366,11 +414,11 @@ fun SettingsScreen(
                         if (isCheckingUpdate) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("检查中...")
+                            Text(stringResource(R.string.about_checking))
                         } else {
                             Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("检查更新")
+                            Text(stringResource(R.string.about_check_update))
                         }
                     }
                 }
@@ -387,31 +435,31 @@ fun SettingsScreen(
                             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/cdyUuu/MOSS-TTS-Nano-Android/releases/latest"))
                             context.startActivity(intent)
                         }) {
-                            Text("前往下载 ->")
+                            Text(stringResource(R.string.settings_go_download))
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text("项目介绍", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.settings_project_intro), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    "基于 OpenMOSS 团队开源的 MOSS-TTS-Nano 模型的 Android 端侧语音合成应用。采用 ONNX Runtime 在设备本地进行推理，无需联网即可完成语音合成和声音克隆，保护用户隐私。",
+                    stringResource(R.string.settings_app_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text("功能特性", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.settings_features), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
                 val features = listOf(
-                    "完全离线运行，保护隐私",
-                    "内置多种预设音色",
-                    "支持声音克隆（录制/导入参考音频）",
-                    "支持多个克隆音色管理",
-                                        "支持模型导入导出",
-                    "多镜像源下载，国内加速",
-                    "深色模式适配",
+                    stringResource(R.string.settings_feature_1),
+                    stringResource(R.string.settings_feature_2),
+                    stringResource(R.string.settings_feature_3),
+                    stringResource(R.string.settings_feature_4),
+                                        stringResource(R.string.settings_feature_5),
+                    stringResource(R.string.settings_feature_6),
+                    stringResource(R.string.settings_feature_7),
                 )
                 features.forEach { feature ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -423,21 +471,77 @@ fun SettingsScreen(
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text("技术栈", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.settings_tech_stack), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text("Kotlin + Jetpack Compose + ONNX Runtime + Material 3", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(12.dp))
 
-                Text("开源协议", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.settings_license), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(4.dp))
-                Text("本项目基于 Apache License 2.0 开源", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("MOSS-TTS-Nano 模型版权归 OpenMOSS 团队所有", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.settings_license_text), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.settings_model_copyright), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
     }
 
+    // 语言选择对话框
+    if (showLanguageDialog) {
+        val languages = listOf(
+            "system" to "跟随系统",
+            "zh" to "简体中文",
+            "en" to "English",
+        )
+        AlertDialog(
+            onDismissRequest = { showLanguageDialog = false },
+            title = { Text(stringResource(R.string.settings_select_language)) },
+            text = {
+                Column {
+                    languages.forEach { (code, name) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { tempLanguage = code }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = tempLanguage == code,
+                                onClick = { tempLanguage = code },
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(name)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    appLanguage = tempLanguage
+                    // 保存到SharedPreferences（立即生效）
+                    context.getSharedPreferences("mosstts_settings", Context.MODE_PRIVATE)
+                        .edit()
+                        .putString("app_language", tempLanguage)
+                        .commit()
+                    // 同时保存到DataStore
+                    scope.launch {
+                        (context.applicationContext as com.mosstts.app.MossTTSApp).preferences.setLanguage(tempLanguage)
+                    }
+                    showLanguageDialog = false
+                    // 重启Activity以应用语言
+                    (context as? android.app.Activity)?.recreate()
+                }) {
+                    Text(stringResource(R.string.action_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLanguageDialog = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            },
+        )
+    }
 }
 
 /**

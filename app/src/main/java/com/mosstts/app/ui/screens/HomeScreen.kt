@@ -1,5 +1,7 @@
 package com.mosstts.app.ui.screens
 
+import com.mosstts.app.R
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -66,6 +68,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -133,11 +136,11 @@ fun HomeScreen(
     if (errorMessage != null) {
         AlertDialog(
             onDismissRequest = { ttsViewModel.clearError() },
-            title = { Text("提示") },
+            title = { Text(stringResource(R.string.dialog_title_tip)) },
             text = { Text(errorMessage ?: "") },
             confirmButton = {
                 TextButton(onClick = { ttsViewModel.clearError() }) {
-                    Text("确定")
+                    Text(stringResource(R.string.action_ok))
                 }
             }
         )
@@ -146,12 +149,12 @@ fun HomeScreen(
     if (showSaveDialog) {
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
-            title = { Text("保存音频") },
+            title = { Text(stringResource(R.string.home_save)) },
             text = {
                 OutlinedTextField(
                     value = saveFileName,
                     onValueChange = { saveFileName = it },
-                    label = { Text("文件名") },
+                    label = { Text(stringResource(R.string.dialog_file_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -164,12 +167,12 @@ fun HomeScreen(
                         saveFileName = ""
                     }
                 }) {
-                    Text("保存")
+                    Text(stringResource(R.string.action_save))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSaveDialog = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -192,7 +195,7 @@ fun HomeScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        "模型未下载",
+                        stringResource(R.string.home_model_not_downloaded),
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
@@ -212,7 +215,7 @@ fun HomeScreen(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text("正在加载模型引擎...")
+                    Text(stringResource(R.string.home_model_not_loaded))
                 }
             }
         }
@@ -224,7 +227,7 @@ fun HomeScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    "输入文本",
+                    stringResource(R.string.home_input_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -232,7 +235,7 @@ fun HomeScreen(
                 OutlinedTextField(
                     value = text,
                     onValueChange = { ttsViewModel.updateText(it) },
-                    placeholder = { Text("输入要合成的文本，支持中文、英文等 20 种语言...") },
+                    placeholder = { Text(stringResource(R.string.home_input_hint)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(160.dp),
@@ -245,18 +248,18 @@ fun HomeScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "${text.length} 字符",
+                        stringResource(R.string.home_char_count, text.length),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Row {
                         TextButton(onClick = { ttsViewModel.updateText("") }) {
-                            Text("清空")
+                            Text(stringResource(R.string.home_clear))
                         }
                         TextButton(onClick = {
                             ttsViewModel.updateText("欢迎使用 MOSS-TTS-Nano，这是一个轻量级的多语言语音合成模型，支持语音克隆和实时流式生成。")
                         }) {
-                            Text("示例")
+                            Text(stringResource(R.string.home_example))
                         }
                     }
                 }
@@ -270,7 +273,7 @@ fun HomeScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    "选择音色",
+                    stringResource(R.string.home_select_voice),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -278,9 +281,9 @@ fun HomeScreen(
 
                 var expanded by remember { mutableStateOf(false) }
                 val currentDisplayName = when {
-                    selectedClonedVoiceId != null -> clonedVoices.find { it.id == selectedClonedVoiceId }?.name ?: "克隆音色"
+                    selectedClonedVoiceId != null -> clonedVoices.find { it.id == selectedClonedVoiceId }?.name ?: stringResource(R.string.home_cloned_voice)
                     selectedVoice.isNotEmpty() -> selectedVoice
-                    else -> "请选择音色"
+                    else -> stringResource(R.string.home_please_select_voice)
                 }
 
                 ExposedDropdownMenuBox(
@@ -291,7 +294,7 @@ fun HomeScreen(
                         value = currentDisplayName,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("音色（内置 + 克隆）") },
+                        label = { Text(stringResource(R.string.home_voice)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -303,7 +306,7 @@ fun HomeScreen(
                     ) {
                         // 内置音色分组
                         DropdownMenuItem(
-                            text = { Text("内置音色", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
+                            text = { Text(stringResource(R.string.home_builtin_voices), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
                             onClick = {},
                             enabled = false,
                         )
@@ -320,7 +323,7 @@ fun HomeScreen(
                         // 克隆音色分组
                         if (clonedVoices.isNotEmpty()) {
                             DropdownMenuItem(
-                                text = { Text("克隆音色", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
+                                text = { Text(stringResource(R.string.home_cloned_voices), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) },
                                 onClick = {},
                                 enabled = false,
                             )
@@ -338,7 +341,7 @@ fun HomeScreen(
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "前往「音色克隆」页面可录制或导入参考音频，创建自定义音色",
+                    stringResource(R.string.home_voice_clone_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -360,7 +363,7 @@ fun HomeScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "正在合成语音...",
+                            stringResource(R.string.home_synthesizing),
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
@@ -396,13 +399,13 @@ fun HomeScreen(
                     ) {
                         Column {
                             Text(
-                                "合成结果",
+                                stringResource(R.string.home_result),
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.SemiBold
                             )
                             lastResult?.let {
                                 Text(
-                                    "时长: ${it.durationMs / 1000.0}s | ${it.generatedFrames} 帧 | ${it.textChunks.size} 段",
+                                    stringResource(R.string.home_result_detail, it.durationMs / 1000.0, it.generatedFrames, it.textChunks.size),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -410,7 +413,7 @@ fun HomeScreen(
                         }
                         Row {
                             IconButton(onClick = { showSaveDialog = true }) {
-                                Icon(Icons.Default.Save, contentDescription = "保存")
+                                Icon(Icons.Default.Save, contentDescription = stringResource(R.string.cd_save))
                             }
                         }
                     }
@@ -434,7 +437,7 @@ fun HomeScreen(
                                 shape = CircleShape,
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                             ) {
-                                Icon(Icons.Default.Pause, contentDescription = "暂停", modifier = Modifier.size(28.dp))
+                                Icon(Icons.Default.Pause, contentDescription = stringResource(R.string.cd_pause), modifier = Modifier.size(28.dp))
                             }
                         } else {
                             Button(
@@ -446,7 +449,7 @@ fun HomeScreen(
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
                                 enabled = lastResult != null
                             ) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = "播放", modifier = Modifier.size(28.dp))
+                                Icon(Icons.Default.PlayArrow, contentDescription = stringResource(R.string.cd_play), modifier = Modifier.size(28.dp))
                             }
                         }
                         Spacer(modifier = Modifier.width(24.dp))
@@ -456,7 +459,7 @@ fun HomeScreen(
                             shape = CircleShape,
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)
                         ) {
-                            Icon(Icons.Default.Stop, contentDescription = "停止", modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Stop, contentDescription = stringResource(R.string.cd_stop), modifier = Modifier.size(24.dp))
                         }
                         Spacer(modifier = Modifier.width(24.dp))
                         OutlinedButton(
@@ -466,7 +469,7 @@ fun HomeScreen(
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
                             enabled = lastResult != null
                         ) {
-                            Icon(Icons.Default.Save, contentDescription = "保存", modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Save, contentDescription = stringResource(R.string.cd_save), modifier = Modifier.size(24.dp))
                         }
                     }
                     // 保存成功消息
@@ -489,7 +492,7 @@ fun HomeScreen(
                                     modifier = Modifier.weight(1f)
                                 )
                                 IconButton(onClick = { ttsViewModel.clearSaveMessage() }) {
-                                    Icon(Icons.Default.Close, contentDescription = "关闭", modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.cd_close), modifier = Modifier.size(16.dp))
                                 }
                             }
                         }
@@ -517,11 +520,11 @@ fun HomeScreen(
                     strokeWidth = 2.dp
                 )
                 Spacer(modifier = Modifier.width(12.dp))
-                Text("合成中...", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.home_synthesizing), fontSize = 18.sp, fontWeight = FontWeight.Bold)
             } else {
                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("开始合成", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.home_synthesize), fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
         }
 

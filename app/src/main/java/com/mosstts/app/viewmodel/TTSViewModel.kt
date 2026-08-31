@@ -386,6 +386,10 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
         _errorMessage.value = null
     }
 
+    fun showError(message: String) {
+        _errorMessage.value = message
+    }
+
     // ==================== 语音克隆参考音频 ====================
 
     fun startRecording() {

@@ -1,5 +1,7 @@
 package com.mosstts.app.ui.screens
 
+import com.mosstts.app.R
+
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -49,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -129,21 +132,21 @@ fun ModelsScreen(
                         tint = if (isModelReady) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("模型状态", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.models_status), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
-                StatusRow("TTS 模型", if (isModelReady) "已就绪" else "未下载", isModelReady)
-                StatusRow("语音克隆模型", if (isVoiceCloneReady) "已就绪" else "未下载（可选）", isVoiceCloneReady)
-                StatusRow("已占用空间", modelViewModel.formatSize(modelSize), true)
+                StatusRow(stringResource(R.string.models_tts_model), if (isModelReady) stringResource(R.string.models_ready) else stringResource(R.string.models_not_downloaded), isModelReady)
+                StatusRow(stringResource(R.string.models_voice_clone_model), if (isVoiceCloneReady) stringResource(R.string.models_ready) else stringResource(R.string.models_not_downloaded_optional), isVoiceCloneReady)
+                StatusRow(stringResource(R.string.models_used_space), modelViewModel.formatSize(modelSize), true)
                 StatusRow(
-                    "推理引擎",
+                    stringResource(R.string.models_inference_engine),
                     when (engineState) {
-                        ModelManager.EngineState.READY -> "已加载"
-                        ModelManager.EngineState.LOADING -> "加载中..."
-                        ModelManager.EngineState.ERROR -> "加载失败"
-                        ModelManager.EngineState.SYNTHESIZING -> "合成中"
-                        else -> "未加载"
+                        ModelManager.EngineState.READY -> stringResource(R.string.models_loaded)
+                        ModelManager.EngineState.LOADING -> stringResource(R.string.models_loading)
+                        ModelManager.EngineState.ERROR -> stringResource(R.string.models_load_failed)
+                        ModelManager.EngineState.SYNTHESIZING -> stringResource(R.string.models_synthesizing)
+                        else -> stringResource(R.string.models_not_loaded)
                     },
                     engineState == ModelManager.EngineState.READY,
                 )
@@ -160,7 +163,7 @@ fun ModelsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("引擎加载失败", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                Text(stringResource(R.string.models_engine_failed), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(engineError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer)
@@ -168,7 +171,7 @@ fun ModelsScreen(
                             OutlinedButton(onClick = { ttsViewModel.initializeEngine() }) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("重试加载")
+                                Text(stringResource(R.string.models_retry_load))
                             }
                         }
                     }
@@ -191,7 +194,7 @@ fun ModelsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Download, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("下载镜像源", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.models_mirror), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     OutlinedButton(
                         onClick = { modelViewModel.testMirrorSpeeds() },
@@ -200,16 +203,16 @@ fun ModelsScreen(
                         if (isTestingSpeed) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("测速中")
+                            Text(stringResource(R.string.models_testing))
                         } else {
                             Icon(Icons.Default.Speed, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("一键测速")
+                            Text(stringResource(R.string.models_speed_test))
                         }
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("选择下载速度最快的镜像源，测速后自动选择最快节点", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.models_speed_test_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
 
                 modelViewModel.mirrorSources.forEach { mirror ->
@@ -241,7 +244,7 @@ fun ModelsScreen(
                                 } else if (speedResult != null && !speedResult.success) {
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        "不可用",
+                                        stringResource(R.string.models_unavailable),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.error,
                                     )
@@ -278,9 +281,9 @@ fun ModelsScreen(
                         }
                         Text(
                             when {
-                                isPaused -> "已暂停"
-                                downloadProgress?.isComplete == true -> "下载完成"
-                                else -> "正在下载模型..."
+                                isPaused -> stringResource(R.string.models_paused)
+                                downloadProgress?.isComplete == true -> stringResource(R.string.models_download_complete)
+                                else -> stringResource(R.string.models_downloading)
                             },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
@@ -297,7 +300,7 @@ fun ModelsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
-                                "第 ${progress.currentFileIndex}/${progress.totalFiles} 个文件",
+                                stringResource(R.string.models_file_progress, progress.currentFileIndex, progress.totalFiles),
                                 style = MaterialTheme.typography.bodySmall,
                                 fontWeight = FontWeight.Bold,
                             )
@@ -355,17 +358,17 @@ fun ModelsScreen(
                                 Button(onClick = { modelViewModel.resumeDownload() }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("继续")
+                                    Text(stringResource(R.string.models_resume))
                                 }
                             } else {
                                 OutlinedButton(onClick = { modelViewModel.pauseDownload() }, modifier = Modifier.weight(1f)) {
                                     Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("暂停")
+                                    Text(stringResource(R.string.models_pause))
                                 }
                             }
                             OutlinedButton(onClick = { modelViewModel.cancelDownload() }) {
-                                Text("取消")
+                                Text(stringResource(R.string.models_cancel))
                             }
                         }
                     }
@@ -384,13 +387,13 @@ fun ModelsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Error, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("操作失败", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                        Text(stringResource(R.string.models_operation_failed), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(errorMessage ?: "", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onErrorContainer)
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(onClick = { modelViewModel.clearError() }) {
-                        Text("关闭")
+                        Text(stringResource(R.string.action_cancel))
                     }
                 }
             }
@@ -408,7 +411,7 @@ fun ModelsScreen(
                 ) {
                     Icon(Icons.Default.Download, contentDescription = null)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(if (isModelReady) "重新下载" else "下载模型")
+                    Text(if (isModelReady) stringResource(R.string.models_redownload) else stringResource(R.string.models_start_download))
                 }
             }
 
@@ -426,9 +429,9 @@ fun ModelsScreen(
             shape = RoundedCornerShape(16.dp),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("模型备份", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.models_backup), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("导出模型到 zip 文件备份，或从 zip 文件导入模型", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.models_backup_desc), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
@@ -438,7 +441,7 @@ fun ModelsScreen(
                     ) {
                         Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("导出模型")
+                        Text(stringResource(R.string.models_export))
                     }
                     OutlinedButton(
                         onClick = { importLauncher.launch(arrayOf("application/zip", "*/*")) },
@@ -446,7 +449,7 @@ fun ModelsScreen(
                     ) {
                         Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("导入模型")
+                        Text(stringResource(R.string.models_import))
                     }
                     // 导出/导入进度提示
                     if (isExporting && exportProgress.isNotEmpty()) {
@@ -460,7 +463,7 @@ fun ModelsScreen(
                     if (isImporting) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "正在导入模型，请稍候...",
+                            stringResource(R.string.models_importing),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
@@ -476,12 +479,12 @@ fun ModelsScreen(
             shape = RoundedCornerShape(16.dp),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("使用说明", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.models_usage), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("1. 首次使用需下载模型文件（约 700MB），建议在 WiFi 环境下下载", style = MaterialTheme.typography.bodySmall)
-                Text("2. 下载使用前台服务，可在通知栏暂停/继续，防止被系统杀死", style = MaterialTheme.typography.bodySmall)
-                Text("3. 下载完成后引擎会自动加载，返回「合成」页面即可使用", style = MaterialTheme.typography.bodySmall)
-                Text("4. 建议在设置中关闭电池优化，以获得更稳定的后台下载", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.models_usage_1), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.models_usage_2), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.models_usage_3), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.models_usage_4), style = MaterialTheme.typography.bodySmall)
             }
         }
 
@@ -492,19 +495,19 @@ fun ModelsScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("删除模型") },
-            text = { Text("确定要删除所有已下载的模型文件吗？删除后需要重新下载才能使用。") },
+            title = { Text(stringResource(R.string.models_delete)) },
+            text = { Text(stringResource(R.string.models_delete_confirm)) },
             confirmButton = {
                 TextButton(onClick = {
                     modelViewModel.deleteModels()
                     showDeleteDialog = false
                 }) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.action_delete), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.models_cancel))
                 }
             },
         )

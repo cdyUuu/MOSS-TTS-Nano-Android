@@ -1,5 +1,7 @@
 package com.mosstts.app.ui.screens
 
+import com.mosstts.app.R
+
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -48,9 +50,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
@@ -78,30 +85,41 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
     var voiceToRename by remember { mutableStateOf<String?>(null) }
     var renameText by remember { mutableStateOf("") }
 
+    val filePickerScope = rememberCoroutineScope()
     val filePickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            // 复制到应用私有目录
-            val inputStream = context.contentResolver.openInputStream(it)
-            val tempFile = File(context.cacheDir, "ref_audio_${System.currentTimeMillis()}.wav")
-            inputStream?.use { input ->
-                FileOutputStream(tempFile).use { output ->
-                    input.copyTo(output)
+            // 在后台线程复制文件，避免大文件卡顿
+            filePickerScope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(it)
+                    val tempFile = File(context.filesDir, "ref_audio_${System.currentTimeMillis()}.wav")
+                    inputStream?.use { input ->
+                        FileOutputStream(tempFile).use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                    withContext(Dispatchers.Main) {
+                        ttsViewModel.importReferenceAudio(tempFile)
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        ttsViewModel.showError("导入音频失败：${e.message ?: "未知错误"}")
+                    }
                 }
             }
-            ttsViewModel.importReferenceAudio(tempFile)
         }
     }
 
     if (errorMessage != null) {
         AlertDialog(
             onDismissRequest = { ttsViewModel.clearError() },
-            title = { Text("提示") },
+            title = { Text(stringResource(R.string.dialog_title_tip)) },
             text = { Text(errorMessage ?: "") },
             confirmButton = {
                 TextButton(onClick = { ttsViewModel.clearError() }) {
-                    Text("确定")
+                    Text(stringResource(R.string.action_ok))
                 }
             }
         )
@@ -110,20 +128,20 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("确认删除") },
-            text = { Text("确定要删除这个克隆音色吗？删除后无法恢复。") },
+            title = { Text(stringResource(R.string.action_confirm)) },
+            text = { Text(stringResource(R.string.voice_delete_confirm)) },
             confirmButton = {
                 TextButton(onClick = {
                     voiceToDelete?.let { ttsViewModel.deleteClonedVoice(it) }
                     voiceToDelete = null
                     showDeleteConfirm = false
                 }) {
-                    Text("确定")
+                    Text(stringResource(R.string.action_ok))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -133,12 +151,12 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
     if (showRenameDialog) {
         AlertDialog(
             onDismissRequest = { showRenameDialog = false },
-            title = { Text("重命名音色") },
+            title = { Text(stringResource(R.string.dialog_rename_voice)) },
             text = {
                 OutlinedTextField(
                     value = renameText,
                     onValueChange = { renameText = it },
-                    label = { Text("音色名称") },
+                    label = { Text(stringResource(R.string.dialog_voice_name)) },
                     singleLine = true,
                 )
             },
@@ -151,12 +169,12 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                     }
                     showRenameDialog = false
                 }) {
-                    Text("确定")
+                    Text(stringResource(R.string.action_ok))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showRenameDialog = false }) {
-                    Text("取消")
+                    Text(stringResource(R.string.action_cancel))
                 }
             }
         )
@@ -178,14 +196,14 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    "语音克隆",
+                    stringResource(R.string.voice_section_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "录制 5-10 秒清晰的参考音频，或导入 WAV 文件，即可用该音色合成语音。参考音频越清晰、噪声越少，克隆效果越好。",
+                    stringResource(R.string.voice_record_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -203,9 +221,9 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Mic, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("我的克隆音色", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.voice_my_cloned), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.weight(1f))
-                        Text("${clonedVoices.size} 个", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(R.string.voice_count, clonedVoices.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     clonedVoices.forEach { voice ->
@@ -234,7 +252,7 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(voice.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                                     Text(
-                                        "创建于 ${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(voice.createdAt))}",
+                                        stringResource(R.string.voice_created_at) + " ${java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault()).format(java.util.Date(voice.createdAt))}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -244,13 +262,13 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                                     renameText = voice.name
                                     showRenameDialog = true
                                 }) {
-                                    Icon(Icons.Default.Edit, contentDescription = "重命名", modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.cd_rename), modifier = Modifier.size(18.dp))
                                 }
                                 IconButton(onClick = {
                                     voiceToDelete = voice.id
                                     showDeleteConfirm = true
                                 }) {
-                                    Icon(Icons.Default.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.cd_delete), tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
                                 }
                             }
                         }
@@ -278,7 +296,7 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                 ) {
                     Column {
                         Text(
-                            "当前克隆音色",
+                            stringResource(R.string.voice_current),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -289,7 +307,7 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                         Text(
-                            "${codes.size} 帧参考音频",
+                            stringResource(R.string.voice_frames, codes.size),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
@@ -297,7 +315,7 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                     IconButton(onClick = { showDeleteConfirm = true }) {
                         Icon(
                             Icons.Default.Delete,
-                            contentDescription = "清除",
+                            contentDescription = stringResource(R.string.cd_clear),
                             tint = MaterialTheme.colorScheme.error
                         )
                     }
@@ -317,7 +335,7 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    "录制参考音频",
+                    stringResource(R.string.voice_record_section),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -357,14 +375,14 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                     if (isRecording) {
                         Icon(
                             Icons.Default.Stop,
-                            contentDescription = "停止录音",
+                            contentDescription = stringResource(R.string.cd_stop_record),
                             tint = androidx.compose.ui.graphics.Color.White,
                             modifier = Modifier.size(40.dp)
                         )
                     } else {
                         Icon(
                             Icons.Default.Mic,
-                            contentDescription = "开始录音",
+                            contentDescription = stringResource(R.string.cd_start_record),
                             tint = androidx.compose.ui.graphics.Color.White,
                             modifier = Modifier.size(40.dp)
                         )
@@ -373,7 +391,7 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    if (isRecording) "正在录音，点击停止并使用" else "点击开始录音",
+                    if (isRecording) stringResource(R.string.voice_recording_tap_stop) else stringResource(R.string.voice_tap_start),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -396,13 +414,13 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                     .padding(16.dp)
             ) {
                 Text(
-                    "导入参考音频",
+                    stringResource(R.string.voice_import_section),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "支持 WAV 格式音频文件，建议 48kHz 采样率，时长 5-10 秒",
+                    stringResource(R.string.voice_import_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -414,7 +432,7 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                 ) {
                     Icon(Icons.Default.FileOpen, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("选择音频文件")
+                    Text(stringResource(R.string.voice_select_file))
                 }
             }
         }
@@ -434,11 +452,11 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 val tips = listOf(
-                    "在安静环境中录制，避免背景噪声",
-                    "参考音频时长建议 5-10 秒，语音清晰",
-                    "录制时保持自然语速，不要过快或过慢",
-                    "克隆音色设置后，在「语音合成」页面自动使用",
-                    "不同语言的参考音频会影响合成效果"
+                    stringResource(R.string.voice_tip_1),
+                    stringResource(R.string.voice_tip_2),
+                    stringResource(R.string.voice_tip_3),
+                    stringResource(R.string.voice_tip_4),
+                    stringResource(R.string.voice_tip_5)
                 )
                 tips.forEach { tip ->
                     Row(verticalAlignment = Alignment.Top) {
