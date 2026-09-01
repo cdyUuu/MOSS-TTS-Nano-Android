@@ -376,11 +376,14 @@ fun SettingsScreen(
                                         val entryStart = response.indexOf("<entry>")
                                         val titleStart = response.indexOf("<title>", entryStart) + 7
                                         val titleEnd = response.indexOf("</title>", titleStart)
-                                        val parsedVersion = response.substring(titleStart, titleEnd).trim()
+                                        val rawTitle = response.substring(titleStart, titleEnd).trim()
+                                        // 用正则提取版本号，支持 "v1.0.7"、"Release v1.0.7"、"1.0.7" 等格式
+                                        val versionRegex = Regex("""v?(\d+\.\d+\.\d+)""")
+                                        val parsedVersion = versionRegex.find(rawTitle)?.groupValues?.get(1) ?: rawTitle.removePrefix("v")
                                         latestVersion = parsedVersion
                                         val current = packageInfo.versionName
                                         // 解析版本号数字进行比较
-                                        val remoteParts = parsedVersion.removePrefix("v").split(".").map { it.toIntOrNull() ?: 0 }
+                                        val remoteParts = parsedVersion.split(".").map { it.toIntOrNull() ?: 0 }
                                         val currentParts = current.split(".").map { it.toIntOrNull() ?: 0 }
                                         var isNewer = false
                                         for (i in 0 until maxOf(remoteParts.size, currentParts.size)) {

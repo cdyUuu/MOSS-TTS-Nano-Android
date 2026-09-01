@@ -496,6 +496,11 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
 
     fun importReferenceAudio(file: File) {
         viewModelScope.launch {
+            // 文件大小检查，超过15MB提示
+            if (file.length() > 15 * 1024 * 1024) {
+                _errorMessage.value = "音频文件过大（${file.length() / 1024 / 1024}MB），建议使用30秒以内的参考音频"
+                return@launch
+            }
             val pcm = readWavToPcm(file)
             if (pcm == null) {
                 _errorMessage.value = "无法读取音频文件，请确保是 WAV 格式"
@@ -640,12 +645,18 @@ class TTSViewModel(application: Application) : AndroidViewModel(application) {
                             return null
                         }
                     } else if (chunkId == "data") {
-                        dataBytes = ByteArray(chunkSize)
+                        // 限制最大30秒，避免大文件内存溢出（48kHz * 16bit * 立体声 * 30秒 ≈ 5.76MB）
+                        val maxBytes = 30 * 48000 * 2 * 2
+                        val readSize = minOf(chunkSize, maxBytes)
+                        dataBytes = ByteArray(readSize)
                         var totalRead = 0
-                        while (totalRead < chunkSize) {
-                            val read = fis.read(dataBytes, totalRead, chunkSize - totalRead)
+                        while (totalRead < readSize) {
+                            val read = fis.read(dataBytes, totalRead, readSize - totalRead)
                             if (read == -1) break
                             totalRead += read
+                        }
+                        if (chunkSize > maxBytes) {
+                            AppLogger.info(TAG, "音频文件过大，已截断到前30秒: 原大小=$chunkSize, 读取=$totalRead")
                         }
                         AppLogger.info(TAG, "数据块大小: $chunkSize, 实际读取: $totalRead")
                     } else {
