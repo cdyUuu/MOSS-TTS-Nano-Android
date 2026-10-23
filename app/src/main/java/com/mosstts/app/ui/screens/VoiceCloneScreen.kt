@@ -2,9 +2,17 @@ package com.mosstts.app.ui.screens
 
 import com.mosstts.app.R
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,6 +59,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,6 +84,8 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
     val referenceAudioCodes by ttsViewModel.referenceAudioCodes.collectAsState()
     val isSynthesizing by ttsViewModel.isSynthesizing.collectAsState()
     val errorMessage by ttsViewModel.errorMessage.collectAsState()
+    // 克隆/导入成功消息（此前未收集，导致成功后用户看不到任何反馈）
+    val saveMessage by ttsViewModel.saveMessage.collectAsState()
     val clonedVoices by ttsViewModel.clonedVoices.collectAsState()
     val selectedClonedVoiceId by ttsViewModel.selectedClonedVoiceId.collectAsState()
     val context = LocalContext.current
@@ -112,6 +123,19 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
         }
     }
 
+    // 录音权限申请（targetSdk 34 必须动态申请 RECORD_AUDIO，否则 startRecording 会因 SecurityException 失败或无声）
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            // 授权后自动开始录音
+            ttsViewModel.startRecording()
+        } else {
+            // 被拒绝时给出提示，避免静默失败
+            ttsViewModel.showError("需要录音权限才能录制参考音频，请在系统设置中授予后重试")
+        }
+    }
+
     if (errorMessage != null) {
         AlertDialog(
             onDismissRequest = { ttsViewModel.clearError() },
@@ -119,6 +143,20 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
             text = { Text(errorMessage ?: "") },
             confirmButton = {
                 TextButton(onClick = { ttsViewModel.clearError() }) {
+                    Text(stringResource(R.string.action_ok))
+                }
+            }
+        )
+    }
+
+    // 克隆/保存成功消息：与 errorMessage 对话框同样式展示，避免成功反馈走错误通道被误读
+    if (saveMessage != null) {
+        AlertDialog(
+            onDismissRequest = { ttsViewModel.clearSaveMessage() },
+            title = { Text(stringResource(R.string.dialog_title_tip)) },
+            text = { Text(saveMessage ?: "") },
+            confirmButton = {
+                TextButton(onClick = { ttsViewModel.clearSaveMessage() }) {
                     Text(stringResource(R.string.action_ok))
                 }
             }
@@ -312,7 +350,9 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     }
-                    IconButton(onClick = { showDeleteConfirm = true }) {
+                    // 清除当前参考音频：此前只设置了 showDeleteConfirm 但未设置 voiceToDelete，
+                    // 确认对话框里 voiceToDelete 为空或残留上一条记录，会删错音色/无任何反应
+                    IconButton(onClick = { ttsViewModel.clearReferenceAudio() }) {
                         Icon(
                             Icons.Default.Delete,
                             contentDescription = stringResource(R.string.cd_clear),
@@ -366,8 +406,15 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
                         .clickable {
                             if (isRecording) {
                                 ttsViewModel.stopRecordingAndUse()
-                            } else {
+                            } else if (
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                                == PackageManager.PERMISSION_GRANTED
+                            ) {
+                                // 已有录音权限才启动录音，避免 SecurityException / 无声
                                 ttsViewModel.startRecording()
+                            } else {
+                                // 无权限时先申请，授权回调中再启动录音
+                                recordPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             }
                         },
                     contentAlignment = Alignment.Center
@@ -475,6 +522,18 @@ fun VoiceCloneScreen(ttsViewModel: TTSViewModel) {
 @Composable
 fun RecordingWaveform() {
     val barCount = 24
+    // 用无限过渡动画驱动正弦相位：此前使用 System.currentTimeMillis() 读取时间，
+    // 非动画 Composable 不会因时间流逝而重组，波形是静止的
+    val infiniteTransition = rememberInfiniteTransition(label = "recording_waveform")
+    val phase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2f * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "phase"
+    )
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -483,7 +542,9 @@ fun RecordingWaveform() {
         verticalAlignment = Alignment.CenterVertically
     ) {
         repeat(barCount) { index ->
-            val height = (20 + Math.sin((index + System.currentTimeMillis() / 100.0) * 0.5) * 12).toInt().coerceAtLeast(8)
+            // 每根柱子按索引产生相位偏移，随动画相位起伏，形成流动的波形效果
+            val amplitude = (Math.sin((index * 0.5f + phase).toDouble()) * 0.5 + 0.5).toFloat()
+            val height = (8 + amplitude * 22).toInt().coerceAtLeast(4)
             Box(
                 modifier = Modifier
                     .width(4.dp)

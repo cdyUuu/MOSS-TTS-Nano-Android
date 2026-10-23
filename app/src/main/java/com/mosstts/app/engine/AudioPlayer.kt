@@ -53,8 +53,9 @@ class StreamingAudioPlayer(
         tempWavFile = File(context.cacheDir, "tts_playback_${System.currentTimeMillis()}.wav")
         saveWav(pcm, tempWavFile!!)
 
+        var player: MediaPlayer? = null
         try {
-            mediaPlayer = MediaPlayer().apply {
+            player = MediaPlayer().apply {
                 setDataSource(tempWavFile!!.absolutePath)
                 prepare()
                 setOnCompletionListener {
@@ -62,12 +63,36 @@ class StreamingAudioPlayer(
                     _state.value = PlaybackState.COMPLETED
                     stopProgressUpdate()
                 }
+                // 播放过程中出错时重置状态并释放，避免状态卡在 PLAYING、进度条停滞
+                setOnErrorListener { mp, what, extra ->
+                    Log.e(TAG, "MediaPlayer 播放出错: what=$what, extra=$extra")
+                    _state.value = PlaybackState.STOPPED
+                    stopProgressUpdate()
+                    try {
+                        mp.release()
+                    } catch (_: Exception) {}
+                    if (mediaPlayer === mp) mediaPlayer = null
+                    true
+                }
                 start()
             }
+            // 构造成功后再赋给字段：apply 内部抛异常时 player 局部变量仍可被释放
+            mediaPlayer = player
             _state.value = PlaybackState.PLAYING
             startProgressUpdate()
         } catch (e: Exception) {
             Log.e(TAG, "Failed to play audio", e)
+            // 构造/准备阶段失败时释放未赋给字段的 MediaPlayer，避免原生资源泄漏
+            try {
+                player?.release()
+            } catch (_: Exception) {}
+            mediaPlayer = null
+            stopProgressUpdate()
+            // 删除临时文件
+            tempWavFile?.let {
+                try { it.delete() } catch (_: Exception) {}
+            }
+            tempWavFile = null
             _state.value = PlaybackState.STOPPED
         }
     }
@@ -140,6 +165,27 @@ class StreamingAudioPlayer(
             mediaPlayer?.setVolume(volume.coerceIn(0f, 1f), volume.coerceIn(0f, 1f))
         } catch (e: Exception) {
             Log.e(TAG, "Set volume failed", e)
+        }
+    }
+
+    /**
+     * 设置播放速度（倍率）。MediaPlayer.setPlaybackParams 从 API 23 起可用；
+     * 部分设备/状态下调用可能抛异常，失败时静默保持原速，不影响播放。
+     */
+    fun setSpeed(speed: Float) {
+        val safeSpeed = if (speed > 0f) speed.coerceIn(0.25f, 4.0f) else 1f
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                mediaPlayer?.let { mp ->
+                    if (mp.isPlaying) {
+                        mp.playbackParams = mp.playbackParams.setSpeed(safeSpeed)
+                    } else {
+                        mp.playbackParams = android.media.PlaybackParams().setSpeed(safeSpeed)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Set speed failed: ${e.message}")
         }
     }
 

@@ -37,8 +37,13 @@ object ModelExporter {
             val totalSize = files.sumOf { it.length() }
             AppLogger.info(TAG, "开始导出模型，文件数: ${files.size}, 总大小: ${formatSize(totalSize)}")
 
-            context.contentResolver.openOutputStream(outputUri)?.use { outputStream ->
-                ZipOutputStream(outputStream).use { zipOut ->
+            val outputStream = context.contentResolver.openOutputStream(outputUri)
+            if (outputStream == null) {
+                AppLogger.error(TAG, "无法打开输出流: $outputUri")
+                return false
+            }
+            outputStream.use { os ->
+                ZipOutputStream(os).use { zipOut ->
                     zipOut.setLevel(java.util.zip.Deflater.BEST_SPEED)
                     files.forEachIndexed { index, file ->
                         val relativePath = file.relativeTo(modelDir).path
@@ -83,18 +88,30 @@ object ModelExporter {
 
             // 解压到临时目录
             var fileCount = 0
-            context.contentResolver.openInputStream(inputUri)?.use { inputStream ->
-                ZipInputStream(inputStream).use { zipIn ->
+            val canonicalBase = tempDir.canonicalPath
+            val inputStream = context.contentResolver.openInputStream(inputUri)
+            if (inputStream == null) {
+                AppLogger.error(TAG, "无法打开输入流: $inputUri")
+                tempDir.deleteRecursively()
+                return false
+            }
+            inputStream.use { ins ->
+                ZipInputStream(ins).use { zipIn ->
                     var entry: ZipEntry? = zipIn.nextEntry
                     while (entry != null) {
                         if (!entry.isDirectory) {
                             val outputFile = File(tempDir, entry.name)
-                            outputFile.parentFile?.mkdirs()
-                            FileOutputStream(outputFile).use { output ->
-                                zipIn.copyTo(output)
+                            // Zip Slip 防护：条目名规范化后必须位于临时目录内
+                            if (!outputFile.canonicalPath.startsWith(canonicalBase + File.separator)) {
+                                AppLogger.error(TAG, "检测到非法 ZIP 条目，已跳过: ${entry.name}")
+                            } else {
+                                outputFile.parentFile?.mkdirs()
+                                FileOutputStream(outputFile).use { output ->
+                                    zipIn.copyTo(output)
+                                }
+                                fileCount++
+                                AppLogger.debug(TAG, "解压文件: ${entry.name} (${outputFile.length() / 1024}KB)")
                             }
-                            fileCount++
-                            AppLogger.debug(TAG, "解压文件: ${entry.name} (${outputFile.length() / 1024}KB)")
                         }
                         zipIn.closeEntry()
                         entry = zipIn.nextEntry
@@ -114,13 +131,28 @@ object ModelExporter {
             }
 
             // 替换旧模型
-            if (modelDir.exists()) {
-                val backupDir = File(context.filesDir, "models_backup_${System.currentTimeMillis()}")
-                modelDir.renameTo(backupDir)
-                AppLogger.info(TAG, "旧模型已备份到: ${backupDir.name}")
+            val backupDir = File(context.filesDir, "models_backup_${System.currentTimeMillis()}")
+            val hadOldModel = modelDir.exists()
+            if (hadOldModel && !modelDir.renameTo(backupDir)) {
+                AppLogger.error(TAG, "旧模型备份失败，中止导入")
+                tempDir.deleteRecursively()
+                return false
             }
 
-            tempDir.renameTo(modelDir)
+            if (!tempDir.renameTo(modelDir)) {
+                // 替换失败：恢复旧模型
+                if (hadOldModel) {
+                    backupDir.renameTo(modelDir)
+                }
+                tempDir.deleteRecursively()
+                AppLogger.error(TAG, "模型目录替换失败")
+                return false
+            }
+
+            // 导入成功，删除旧模型备份，避免每次导入都残留一份完整模型占用空间
+            if (hadOldModel) {
+                backupDir.deleteRecursively()
+            }
             AppLogger.info(TAG, "模型导入成功")
             true
         } catch (e: Exception) {

@@ -48,10 +48,15 @@ class ModelDownloadService : Service() {
             val intent = Intent(context, ModelDownloadService::class.java).apply {
                 action = ACTION_START
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
+                }
+            } catch (e: Exception) {
+                // Android 8+ 后台启动前台服务会抛 IllegalStateException，此处仅记录
+                AppLogger.error(TAG, "启动下载服务失败: ${e.message}", e)
             }
         }
 
@@ -60,7 +65,11 @@ class ModelDownloadService : Service() {
             val intent = Intent(context, ModelDownloadService::class.java).apply {
                 action = ACTION_PAUSE
             }
-            context.startService(intent)
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "暂停下载服务失败: ${e.message}", e)
+            }
         }
 
         fun resume(context: Context) {
@@ -68,16 +77,28 @@ class ModelDownloadService : Service() {
             val intent = Intent(context, ModelDownloadService::class.java).apply {
                 action = ACTION_RESUME
             }
-            context.startService(intent)
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "继续下载服务失败: ${e.message}", e)
+            }
         }
 
         fun cancel(context: Context) {
             isPaused = false
             isRunning = false
+            // 通知下载器中断正在进行的网络读取
+            runCatching {
+                (context.applicationContext as? MossTTSApp)?.modelDownloader?.cancel()
+            }
             val intent = Intent(context, ModelDownloadService::class.java).apply {
                 action = ACTION_CANCEL
             }
-            context.startService(intent)
+            try {
+                context.startService(intent)
+            } catch (e: Exception) {
+                AppLogger.error(TAG, "取消下载服务失败: ${e.message}", e)
+            }
         }
     }
 
@@ -142,6 +163,10 @@ class ModelDownloadService : Service() {
             ACTION_CANCEL -> {
                 isRunning = false
                 isPaused = false
+                // 兜底：确保下载器中断（composite 的 cancel() 可能因 Context 转换失败未执行）
+                runCatching {
+                    (application as? MossTTSApp)?.modelDownloader?.cancel()
+                }
                 updateNotification("下载已取消", "", 0, true)
                 stopSelf()
             }

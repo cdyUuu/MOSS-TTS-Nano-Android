@@ -2,5 +2,12 @@
 <data-extraction-rules>
     <cloud-backup>
         <include domain="sharedpref" path="."/>
+        <!-- 应用设置使用 DataStore（mosstts_settings），位于 files/datastore/ -->
+        <include domain="file" path="datastore"/>
     </cloud-backup>
+    <!-- Android 12+ 设备间直接传输：未声明时该渠道不备份任何数据 -->
+    <device-transfer>
+        <include domain="sharedpref" path="."/>
+        <include domain="file" path="datastore"/>
+    </device-transfer>
 </data-extraction-rules>

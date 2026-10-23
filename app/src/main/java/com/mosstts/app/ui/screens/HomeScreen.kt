@@ -66,6 +66,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -106,7 +107,6 @@ fun HomeScreen(
     val isSynthesizing by ttsViewModel.isSynthesizing.collectAsState()
     val isPlaying by ttsViewModel.isPlaying.collectAsState()
     val saveMessage by ttsViewModel.saveMessage.collectAsState()
-    var showHistory by remember { mutableStateOf(false) }
     val synthesisProgress by ttsViewModel.synthesisProgress.collectAsState()
     val playbackProgress by ttsViewModel.playbackProgress.collectAsState()
     val lastResult by ttsViewModel.lastResult.collectAsState()
@@ -122,7 +122,9 @@ fun HomeScreen(
     // 监听模型就绪状态，自动初始化引擎
     LaunchedEffect(isModelReady, engineState) {
         if (isModelReady && engineState == com.mosstts.app.data.ModelManager.EngineState.NOT_READY) {
-            ttsViewModel.initializeEngine()
+            // 读取用户设置的 CPU 线程数，避免始终使用默认值 4 导致设置页的线程数不生效
+            val threads = ttsViewModel.preferences.cpuThreads.first()
+            ttsViewModel.initializeEngine(threads)
         }
     }
 

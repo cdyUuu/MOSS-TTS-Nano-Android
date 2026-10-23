@@ -72,6 +72,7 @@ class ModelManager(private val context: Context) {
             engine = MossTTSEngine(modelDir, cpuThreads)
             val elapsed = System.currentTimeMillis() - startTime
             _engineState.value = EngineState.READY
+            _initError = null
             AppLogger.info(TAG, "引擎初始化成功，耗时: ${elapsed}ms, 音色数: ${engine?.builtinVoices?.size}")
             true
         } catch (e: Exception) {
@@ -84,6 +85,9 @@ class ModelManager(private val context: Context) {
 
     private var _initError: String? = null
     val initError: String? get() = _initError
+
+    private val _synthesisError = MutableStateFlow<String?>(null)
+    val synthesisError: StateFlow<String?> = _synthesisError.asStateFlow()
 
     /**
      * 确保模型目录中有 browser_poc_manifest.json 文件。
@@ -128,6 +132,7 @@ class ModelManager(private val context: Context) {
         _synthesisProgress.value = 0f
 
         try {
+            _synthesisError.value = null
             val result = eng.synthesize(
                 text = text,
                 voice = voice,
@@ -144,6 +149,8 @@ class ModelManager(private val context: Context) {
             result
         } catch (e: Exception) {
             Log.e(TAG, "Synthesis failed", e)
+            AppLogger.error(TAG, "合成失败: ${e.message}", e)
+            _synthesisError.value = e.message ?: "合成失败"
             null
         } finally {
             if (_engineState.value == EngineState.SYNTHESIZING) {
@@ -167,10 +174,11 @@ class ModelManager(private val context: Context) {
 
     fun saveWav(pcm: FloatArray, fileName: String): File? {
         return try {
+            val eng = engine ?: return null
             val outputDir = File(context.getExternalFilesDir(null), "output")
             outputDir.mkdirs()
             val outputFile = File(outputDir, fileName)
-            engine?.writeWav(pcm, outputFile)
+            eng.writeWav(pcm, outputFile)
             outputFile
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save WAV", e)
@@ -178,11 +186,12 @@ class ModelManager(private val context: Context) {
         }
     }
 
-    fun saveWavToPath(pcm: FloatArray, filePath: String): Boolean {
+    fun saveWavToPath(pcm: FloatArray, filePath: String, sampleRate: Int = 48000): Boolean {
         return try {
+            val eng = engine ?: return false
             val outputFile = File(filePath)
             outputFile.parentFile?.mkdirs()
-            engine?.writeWav(pcm, outputFile)
+            eng.writeWav(pcm, outputFile, sampleRate)
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save WAV to path", e)
@@ -190,20 +199,64 @@ class ModelManager(private val context: Context) {
         }
     }
 
-    fun loadWav(filePath: String): FloatArray? {
+    /**
+     * 加载的 WAV 音频数据。
+     * @param pcm 单声道浮点采样（-1.0 ~ 1.0）
+     * @param sampleRate 采样率（Hz）
+     */
+    data class LoadedWav(val pcm: FloatArray, val sampleRate: Int) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is LoadedWav) return false
+            return sampleRate == other.sampleRate && pcm.contentEquals(other.pcm)
+        }
+
+        override fun hashCode(): Int = 31 * sampleRate + pcm.contentHashCode()
+    }
+
+    fun loadWav(filePath: String): LoadedWav? {
         return try {
             val file = File(filePath)
-            if (!file.exists()) return null
+            if (!file.exists() || file.length() < 44) return null
             java.io.FileInputStream(file).use { fis ->
                 val header = ByteArray(44)
-                fis.read(header)
+                if (!readFully(fis, header)) {
+                    Log.e(TAG, "Failed to read WAV header")
+                    return null
+                }
+                // 校验 RIFF/WAVE 头
+                val riff = String(header, 0, 4, Charsets.US_ASCII)
+                val wave = String(header, 8, 4, Charsets.US_ASCII)
+                if (riff != "RIFF" || wave != "WAVE") {
+                    Log.e(TAG, "Invalid WAV header: $riff/$wave")
+                    return null
+                }
                 val sampleRate = java.nio.ByteBuffer.wrap(header, 24, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int
                 val bitsPerSample = java.nio.ByteBuffer.wrap(header, 34, 2).order(java.nio.ByteOrder.LITTLE_ENDIAN).short.toInt()
                 val channels = java.nio.ByteBuffer.wrap(header, 22, 2).order(java.nio.ByteOrder.LITTLE_ENDIAN).short.toInt()
-                val dataSize = java.nio.ByteBuffer.wrap(header, 40, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int
+                var dataSize = java.nio.ByteBuffer.wrap(header, 40, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).int
+                if (sampleRate <= 0 || sampleRate > 384000) {
+                    Log.e(TAG, "Invalid sample rate: $sampleRate")
+                    return null
+                }
+                if (channels <= 0 || channels > 8) {
+                    Log.e(TAG, "Invalid channel count: $channels")
+                    return null
+                }
+                if (bitsPerSample != 16 && bitsPerSample != 32) {
+                    Log.e(TAG, "Unsupported bits per sample: $bitsPerSample")
+                    return null
+                }
+                // 头部声明的 dataSize 可能超出文件实际大小（或为负），按实际可读长度钳位，
+                // 防止按伪造长度分配内存导致 OOM。
+                val available = (file.length() - 44).toInt().coerceAtLeast(0)
+                dataSize = dataSize.coerceIn(0, available)
                 val rawData = ByteArray(dataSize)
-                fis.read(rawData)
-                if (bitsPerSample == 16) {
+                if (!readFully(fis, rawData)) {
+                    Log.e(TAG, "Failed to read WAV data")
+                    return null
+                }
+                val pcm = if (bitsPerSample == 16) {
                     val shortCount = rawData.size / 2
                     if (channels == 2) {
                         FloatArray(shortCount / 2) { i ->
@@ -217,12 +270,37 @@ class ModelManager(private val context: Context) {
                             sample / 32768f
                         }
                     }
-                } else null
+                } else {
+                    // 32-bit float PCM
+                    val floatCount = rawData.size / 4
+                    val buf = java.nio.ByteBuffer.wrap(rawData).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                    if (channels == 2) {
+                        FloatArray(floatCount / 2) { i ->
+                            (buf.getFloat(i * 8) + buf.getFloat(i * 8 + 4)) / 2f
+                        }
+                    } else {
+                        FloatArray(floatCount) { i -> buf.getFloat(i * 4) }
+                    }
+                }
+                LoadedWav(pcm, sampleRate)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load WAV", e)
             null
         }
+    }
+
+    /**
+     * 循环读取直到缓冲区填满，避免单次 read() 短读导致数据不完整。
+     */
+    private fun readFully(input: java.io.InputStream, buffer: ByteArray): Boolean {
+        var offset = 0
+        while (offset < buffer.size) {
+            val read = input.read(buffer, offset, buffer.size - offset)
+            if (read == -1) return offset == buffer.size
+            offset += read
+        }
+        return true
     }
 
     fun release() {
@@ -233,5 +311,8 @@ class ModelManager(private val context: Context) {
         }
         engine = null
         _engineState.value = EngineState.NOT_READY
+        _initError = null
+        _synthesisError.value = null
+        _synthesisProgress.value = 0f
     }
 }

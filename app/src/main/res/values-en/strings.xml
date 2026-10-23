@@ -159,6 +159,7 @@
     <string name="voice_tip_5">Reference audio in different languages affects synthesis results</string>
     <!-- Model Manager -->
     <string name="models_title">Model Manager</string>
+    <string name="models_download">Download Model</string>
     <string name="models_status">Model Status</string>
     <string name="models_downloaded">Downloaded</string>
     <string name="models_start_download">Start Download</string>
@@ -230,4 +231,9 @@
     <string name="about_latest">Already latest version</string>
     <string name="about_new_version">New version available</string>
     <string name="about_update_failed">Update check failed</string>
+
+    <!-- System TTS engine -->
+    <string name="system_tts_engine_name">MOSS TTS Local Engine</string>
+    <string name="system_tts_engine_desc">System text-to-speech engine powered by the local MOSS-TTS model</string>
+    <string name="system_tts_enable_hint">Go to System Settings &gt; Accessibility / Language &gt; Text-to-speech output, then select MOSS TTS Local Engine to let other apps use this engine for speech. Make sure the model has been downloaded in the app before first use.</string>
 </resources>

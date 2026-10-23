@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <include domain="sharedpref" path="."/>
+    <!-- 应用设置使用 DataStore（mosstts_settings），位于 files/datastore/，
+         必须显式包含，否则恢复备份后主题/语言/推理参数等设置会丢失 -->
+    <include domain="file" path="datastore"/>
 </full-backup-content>

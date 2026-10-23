@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.res.Configuration
 import android.os.Build
 import com.mosstts.app.data.ModelDownloader
+import com.mosstts.app.data.ModelManager
 import com.mosstts.app.data.PreferencesManager
 import com.mosstts.app.util.AppLogger
 import com.mosstts.app.util.CrashHandler
@@ -17,6 +18,13 @@ class MossTTSApp : Application() {
         private set
     lateinit var modelDownloader: ModelDownloader
         private set
+
+    /**
+     * 全局共享的模型管理器单例。
+     * 供应用界面（TTSViewModel）与系统 TTS 引擎（MossTTSService）复用，
+     * 避免同一进程内重复创建 ModelManager、重复加载 ONNX 模型。
+     */
+    val modelManager: ModelManager by lazy { ModelManager(this) }
 
     companion object {
         lateinit var instance: MossTTSApp
@@ -76,7 +84,8 @@ class MossTTSApp : Application() {
                 setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            // 部分定制ROM上 getSystemService 可能返回 null，空安全保护避免启动即崩溃
+            manager?.createNotificationChannel(channel)
         }
     }
 }

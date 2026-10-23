@@ -94,7 +94,11 @@ fun ModelsScreen(
     val importLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { modelViewModel.importModels(it) }
+        uri?.let {
+            // 导入前释放引擎，避免持有旧模型文件句柄导致替换失败
+            ttsViewModel.modelManager.release()
+            modelViewModel.importModels(it)
+        }
     }
 
     // 下载完成后自动初始化引擎
@@ -499,6 +503,8 @@ fun ModelsScreen(
             text = { Text(stringResource(R.string.models_delete_confirm)) },
             confirmButton = {
                 TextButton(onClick = {
+                    // 先释放引擎，避免持有已删除的模型文件句柄
+                    ttsViewModel.modelManager.release()
                     modelViewModel.deleteModels()
                     showDeleteDialog = false
                 }) {

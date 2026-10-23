@@ -54,14 +54,18 @@ class ClonedVoiceStore(context: Context) {
     }
 
     fun deleteVoice(id: String) {
-        val voices = getAllVoices().filter { it.id != id }.toMutableList()
-        // 删除关联文件
-        getAllVoices().find { it.id == id }?.let { voice ->
-            try {
-                java.io.File(voice.audioCodesPath).delete()
-            } catch (_: Exception) {}
+        val voices = getAllVoices()
+        // 删除关联文件（audio codes 与原始参考音频）
+        voices.find { it.id == id }?.let { voice ->
+            listOf(voice.audioCodesPath, voice.referenceAudioPath).forEach { path ->
+                if (path.isNotEmpty()) {
+                    try {
+                        java.io.File(path).delete()
+                    } catch (_: Exception) {}
+                }
+            }
         }
-        saveVoices(voices)
+        saveVoices(voices.filter { it.id != id })
     }
 
     fun renameVoice(id: String, newName: String) {
