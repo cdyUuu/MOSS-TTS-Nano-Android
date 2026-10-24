@@ -147,6 +147,8 @@ class ModelViewModel(application: Application) : AndroidViewModel(application) {
         _isDownloading.value = false
         _isPaused.value = false
         AppLogger.info("ModelViewModel", "取消下载")
+        // 先中断下载器，再停止服务
+        downloader.cancel()
         ModelDownloadService.cancel(getApplication())
     }
 

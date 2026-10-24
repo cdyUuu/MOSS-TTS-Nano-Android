@@ -40,7 +40,13 @@ class SentencePieceTokenizer(modelFile: File) {
     }
 
     init {
-        val parsed = parseModelFile(modelFile.inputStream())
+        val parsed = try {
+            parseModelFile(modelFile.inputStream())
+        } catch (e: Exception) {
+            throw IllegalStateException(
+                "Failed to parse SentencePiece model: ${modelFile.name} (${e.message})", e
+            )
+        }
         pieces = parsed
         pieceToId = pieces.mapIndexed { index, piece -> piece.text to index }.toMap()
 
@@ -68,13 +74,36 @@ class SentencePieceTokenizer(modelFile: File) {
 
     fun decode(ids: IntArray): String {
         val sb = StringBuilder()
-        for (id in ids) {
-            if (id in pieces.indices) {
-                val piece = pieces[id]
-                if (piece.type == TYPE_CONTROL) continue
-                sb.append(piece.text)
+        val byteBuffer = ArrayList<Byte>()
+        fun flushBytes() {
+            if (byteBuffer.isNotEmpty()) {
+                sb.append(String(byteBuffer.toByteArray(), Charsets.UTF_8))
+                byteBuffer.clear()
             }
         }
+        for (id in ids) {
+            if (id !in pieces.indices) continue
+            val piece = pieces[id]
+            when (piece.type) {
+                TYPE_CONTROL -> continue
+                TYPE_BYTE -> {
+                    // byte piece 的 text 是单字节码位，需要聚齐后按 UTF-8 解码
+                    val code = if (piece.text.isNotEmpty()) piece.text[0].code else -1
+                    if (code in 0..255) {
+                        byteBuffer += code.toByte()
+                    } else {
+                        flushBytes()
+                        sb.append(piece.text)
+                    }
+                }
+                else -> {
+                    flushBytes()
+                    // SentencePiece 约定 ▁ 表示空格
+                    sb.append(piece.text.replace('▁', ' '))
+                }
+            }
+        }
+        flushBytes()
         return sb.toString()
     }
 
@@ -83,17 +112,25 @@ class SentencePieceTokenizer(modelFile: File) {
     fun pieceToId(piece: String): Int? = pieceToId[piece]
 
     private fun normalize(text: String): String {
-        // SentencePiece 默认将空格替换为 ▁ (U+2581)
-        var result = text.replace(" ", "▁")
-        // 合并连续的 ▁
-        while ("▁▁" in result) {
-            result = result.replace("▁▁", "▁")
+        if (text.isEmpty()) return text
+        // SentencePiece 默认将所有空白替换为 ▁ (U+2581)，折叠连续空白，并在开头补 ▁
+        val sb = StringBuilder(text.length + 2)
+        sb.append('▁')
+        var lastWasSpace = true
+        for (c in text) {
+            if (c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+                c == '\u000B' || c == '\u000C' || c == '\u00A0' || c == '\u3000'
+            ) {
+                if (!lastWasSpace) {
+                    sb.append('▁')
+                    lastWasSpace = true
+                }
+            } else {
+                sb.append(c)
+                lastWasSpace = false
+            }
         }
-        // 开头加 ▁
-        if (result.isNotEmpty() && result[0] != '▁') {
-            result = "▁$result"
-        }
-        return result
+        return sb.toString()
     }
 
     private fun viterbiEncode(text: String): IntArray {
@@ -127,14 +164,12 @@ class SentencePieceTokenizer(modelFile: File) {
                     }
                 }
             }
-            // 如果没有匹配，使用 unk（单字符）
+            // 如果没有匹配（或只有特殊类型 token 可匹配），使用 unk（单字符）
+            // 注意：长度 1 的普通/byte piece 已在上面 len=1 时匹配过，这里只需处理真正的未登录字符
             if (bestPrev[i + 1] == -1) {
-                val ch = text[i].toString()
-                val unkMatch = pieceToId[ch]
-                val id = unkMatch ?: unkId
                 bestScore[i + 1] = bestScore[i] - 10f // unk 惩罚
                 bestPrev[i + 1] = i
-                bestPieceId[i + 1] = id
+                bestPieceId[i + 1] = unkId
             }
         }
 
@@ -170,6 +205,7 @@ class SentencePieceTokenizer(modelFile: File) {
             if (fieldNumber == 1 && wireType == WIRE_LENGTH_DELIMITED) {
                 // SentencePiece message
                 val len = readVarint(buf).toInt()
+                if (len < 0 || len > buf.remaining()) error("Malformed SentencePiece entry length: $len")
                 val end = buf.position() + len
                 parseSentencePiece(buf, end)?.let { pieces.add(it) }
                 buf.position(end)
@@ -214,6 +250,7 @@ class SentencePieceTokenizer(modelFile: File) {
         var result = 0L
         var shift = 0
         while (shift < 64) {
+            if (!buf.hasRemaining()) error("Malformed varint: unexpected end of buffer")
             val b = buf.get().toInt() and 0xFF
             result = result or ((b.toLong() and 0x7FL) shl shift)
             if (b and 0x80 == 0) break
@@ -228,10 +265,11 @@ class SentencePieceTokenizer(modelFile: File) {
             WIRE_FIXED64 -> buf.position(buf.position() + 8)
             WIRE_LENGTH_DELIMITED -> {
                 val len = readVarint(buf).toInt()
+                if (len < 0 || len > buf.remaining()) error("Malformed length-delimited field: $len")
                 buf.position(buf.position() + len)
             }
             WIRE_FIXED32 -> buf.position(buf.position() + 4)
-            else -> {} // ignore
+            else -> error("Unsupported protobuf wire type: $wireType")
         }
     }
 }

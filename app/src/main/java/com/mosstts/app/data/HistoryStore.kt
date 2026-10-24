@@ -36,7 +36,7 @@ class HistoryStore(context: Context) {
                     voice = obj.optString("voice", "默认"),
                     createdAt = obj.getLong("createdAt"),
                     durationMs = obj.optLong("durationMs", 0),
-                    audioPath = obj.optString("audioPath", null),
+                    audioPath = obj.optString("audioPath", "").ifEmpty { null },
                 )
             }
         } catch (e: Exception) {
@@ -47,19 +47,34 @@ class HistoryStore(context: Context) {
     fun add(history: SynthesisHistory) {
         val list = getAll().toMutableList()
         list.add(0, history)
-        if (list.size > maxHistory) {
-            list.removeAt(list.size - 1)
+        // 超出上限时淘汰最旧的记录，并删除其音频文件，避免文件无限累积
+        while (list.size > maxHistory) {
+            val removed = list.removeAt(list.size - 1)
+            deleteAudioFile(removed)
         }
         save(list)
     }
 
     fun delete(id: String) {
-        val list = getAll().filter { it.id != id }
-        save(list)
+        val list = getAll()
+        list.find { it.id == id }?.let { deleteAudioFile(it) }
+        save(list.filter { it.id != id })
     }
 
     fun clear() {
+        getAll().forEach { deleteAudioFile(it) }
         save(emptyList())
+    }
+
+    private fun deleteAudioFile(history: SynthesisHistory) {
+        val path = history.audioPath ?: return
+        try {
+            val file = java.io.File(path)
+            if (file.exists()) {
+                file.delete()
+            }
+        } catch (_: Exception) {
+        }
     }
 
     private fun save(list: List<SynthesisHistory>) {

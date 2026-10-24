@@ -117,7 +117,8 @@ class MossTTSEngine(
 
         Log.d(TAG, "Text normalized: $normalized, chunks: ${chunks.size}")
 
-        val allPcm = ArrayList<Float>()
+        val allPcmChunks = ArrayList<FloatArray>()
+        var totalSamples = 0
         var totalFrames = 0
         val framesPerChunk = maxFrames ?: manifest.generationDefaults.maxNewFrames
         val estimatedTotalFrames = chunks.size * framesPerChunk
@@ -145,19 +146,31 @@ class MossTTSEngine(
 
             // 解码音频
             val pcm = decodeAudioTokens(audioTokens)
-            allPcm.addAll(pcm.toList())
+            allPcmChunks += pcm
+            totalSamples += pcm.size
             onAudio?.invoke(pcm, chunkIndex == chunks.size - 1)
 
             // 块间插入短暂静音
-            if (chunkIndex < chunks.size - 1) {
+            if (chunkIndex < chunks.size - 1 && !cancelled) {
                 val pauseSamples = (sampleRate * 0.25f).toInt()
                 val pause = FloatArray(pauseSamples) { 0f }
-                allPcm.addAll(pause.toList())
+                allPcmChunks += pause
+                totalSamples += pause.size
                 onAudio?.invoke(pause, false)
             }
         }
 
-        val finalPcm = allPcm.toFloatArray()
+        // 被取消时向流式消费方发送结束标记（空数据 + isLast），避免消费方永远等不到结尾
+        if (cancelled) {
+            onAudio?.invoke(FloatArray(0), true)
+        }
+
+        val finalPcm = FloatArray(totalSamples)
+        var writeOffset = 0
+        for (chunk in allPcmChunks) {
+            System.arraycopy(chunk, 0, finalPcm, writeOffset, chunk.size)
+            writeOffset += chunk.size
+        }
         val elapsedMs = System.currentTimeMillis() - startedAt
 
         return SynthesisResult(
@@ -248,16 +261,16 @@ class MossTTSEngine(
                         throw IllegalStateException("参考音频编码失败：生成的帧数为 0")
                     }
 
-                    val result = ArrayList<IntArray>(codeLength)
+                    val frames = ArrayList<IntArray>(codeLength)
                     for (frameIdx in 0 until codeLength) {
                         val row = IntArray(numQuantizers) { q ->
                             val idx = frameIdx * numQuantizers + q
                             if (idx < audioCodes.size) audioCodes[idx] else 0
                         }
-                        result.add(row)
+                        frames.add(row)
                     }
                     Log.d(TAG, "Encoded reference audio: $codeLength frames, $numQuantizers quantizers")
-                    return result
+                    return frames
                 }
             }
         }
@@ -293,11 +306,11 @@ class MossTTSEngine(
     // ==================== 内部实现 ====================
 
     private fun createSession(modelFile: File, name: String = "unknown"): OrtSession {
-        AppLogger.info(TAG, "加载模型 []: ${modelFile.name}, 存在: ${modelFile.isFile}, 大小: ${modelFile.length() / 1024}KB")
+        AppLogger.info(TAG, "加载模型 [$name]: ${modelFile.name}, 存在: ${modelFile.isFile}, 大小: ${modelFile.length() / 1024}KB")
         require(modelFile.isFile) { "缺少 ONNX 模型文件: ${modelFile.absolutePath}" }
         val startTime = System.currentTimeMillis()
         val session = env.createSession(modelFile.absolutePath, sessionOptions)
-        AppLogger.info(TAG, "模型 [] 加载成功，耗时: ${System.currentTimeMillis() - startTime}ms")
+        AppLogger.info(TAG, "模型 [$name] 加载成功，耗时: ${System.currentTimeMillis() - startTime}ms")
         return session
     }
 
@@ -393,7 +406,8 @@ class MossTTSEngine(
         val cfg = manifest.ttsConfig
         val audioTokens = ArrayList<IntArray>()
         val rowWidth = cfg.nVq + 1
-        val cappedMaxFrames = maxFrames.coerceAtMost(manifest.generationDefaults.maxNewFrames)
+        // maxFrames 由调用方（含用户设置）决定，仅防御非正值；模型自身的 should_continue 会自然终止生成
+        val cappedMaxFrames = maxFrames.coerceAtLeast(1)
 
         val previousTokenSets = Array(cfg.nVq) { HashSet<Int>() }
         val decodePastInputNames = ttsMeta.onnx.decodeInputNames.drop(2)
@@ -539,11 +553,26 @@ class MossTTSEngine(
                     )
                 )
                 outputs.use {
-                    val audio = it.requiredTensor("audio").value as Array<*>
-                    val batch = audio[0] as Array<*>
-                    val channelsData = batch.map { channel -> channel as FloatArray }
+                    val audioValue = it.requiredTensor("audio").value
                     val reportedLength = it.requiredTensor("audio_lengths").scalarInt()
-                    val length = min(reportedLength, channelsData.minOfOrNull { channel -> channel.size } ?: 0)
+                    // 兼容多种输出形状：[1, C, N]（立体声）/ [1, N]（单声道带 batch）/ [N]
+                    val channelsData: List<FloatArray> = when (audioValue) {
+                        is Array<*> -> when (val batch = audioValue.firstOrNull()) {
+                            is Array<*> -> batch.map { channel ->
+                                channel as? FloatArray
+                                    ?: error("codec audio 输出通道类型异常: ${channel?.javaClass?.name}")
+                            }
+                            is FloatArray -> listOf(batch)
+                            else -> error("codec audio 输出形状异常: ${batch?.javaClass?.name}")
+                        }
+                        is FloatArray -> listOf(audioValue)
+                        else -> error("codec audio 输出类型异常: ${audioValue.javaClass.name}")
+                    }
+                    if (channelsData.isEmpty() || channelsData.all { ch -> ch.isEmpty() }) {
+                        return FloatArray(0)
+                    }
+                    val minChannelSize = channelsData.minOf { channel -> channel.size }
+                    val length = reportedLength.coerceIn(0, minChannelSize)
                     // 混合为单声道
                     return FloatArray(length) { sampleIndex ->
                         channelsData.sumOf { channel -> channel[sampleIndex].toDouble() }.toFloat() / channelsData.size
@@ -598,10 +627,16 @@ class MossTTSEngine(
                 is Long -> values += value.toInt()
                 is Short -> values += value.toInt()
                 is Byte -> values += value.toInt()
+                is Float -> values += value.toInt()
+                is Double -> values += value.toInt()
+                is Boolean -> values += if (value) 1 else 0
                 is IntArray -> values += value.toList()
                 is LongArray -> value.forEach { values += it.toInt() }
                 is ShortArray -> value.forEach { values += it.toInt() }
                 is ByteArray -> value.forEach { values += it.toInt() }
+                is FloatArray -> value.forEach { values += it.toInt() }
+                is DoubleArray -> value.forEach { values += it.toInt() }
+                is BooleanArray -> value.forEach { values += if (it) 1 else 0 }
                 is Array<*> -> value.forEach { append(it) }
                 null -> Unit
                 else -> error("Unsupported int tensor value: ${value.javaClass}")

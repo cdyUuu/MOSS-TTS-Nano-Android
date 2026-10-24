@@ -38,8 +38,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -119,7 +117,16 @@ fun SettingsScreen(
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
             intent.data = Uri.parse("package:${context.packageName}")
-            context.startActivity(intent)
+            try {
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                // 部分设备没有对应的系统页面，直接跳转会抛 ActivityNotFoundException 崩溃，此时提示用户手动设置
+                android.widget.Toast.makeText(
+                    context,
+                    "无法打开系统设置页面，请手动在系统设置中允许忽略电池优化",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
@@ -347,9 +354,11 @@ fun SettingsScreen(
 
                 val context = LocalContext.current
                 val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                // longVersionCode 是 API 28 才加入的字段，minSdk=26，在 Android 8.0/8.1 上直接访问会抛 NoSuchFieldError 崩溃，需按 API 分级读取
+                val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) packageInfo.longVersionCode else packageInfo.versionCode.toLong()
                 Row {
                     Text(stringResource(R.string.settings_version) + ": ", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("${packageInfo.versionName} (${packageInfo.longVersionCode})", style = MaterialTheme.typography.bodySmall)
+                    Text("${packageInfo.versionName ?: "unknown"} ($versionCode)", style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -381,7 +390,7 @@ fun SettingsScreen(
                                         val versionRegex = Regex("""v?(\d+\.\d+\.\d+)""")
                                         val parsedVersion = versionRegex.find(rawTitle)?.groupValues?.get(1) ?: rawTitle.removePrefix("v")
                                         latestVersion = parsedVersion
-                                        val current = packageInfo.versionName
+                                        val current = packageInfo.versionName ?: "0.0.0"
                                         // 解析版本号数字进行比较
                                         val remoteParts = parsedVersion.split(".").map { it.toIntOrNull() ?: 0 }
                                         val currentParts = current.split(".").map { it.toIntOrNull() ?: 0 }
@@ -432,11 +441,23 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = if (updateMessage?.contains("最新") == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                     )
-                    if (latestVersion != null && latestVersion != "v${packageInfo.versionName}") {
+                    // latestVersion 为去掉 v 前缀的纯版本号（如 "1.0.7"），用 compareVersions 与当前版本比较，只有远程更新时才显示"去下载"
+                    // 注意：latestVersion 是 remember 委托属性，Kotlin 无法对其做 smart cast，需先取局部变量
+                    val remoteVersion = latestVersion
+                    if (remoteVersion != null && compareVersions(remoteVersion, packageInfo.versionName ?: "0.0.0") > 0) {
                         Spacer(modifier = Modifier.height(4.dp))
                         TextButton(onClick = {
                             val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/cdyUuu/MOSS-TTS-Nano-Android/releases/latest"))
-                            context.startActivity(intent)
+                            try {
+                                context.startActivity(intent)
+                            } catch (e: Exception) {
+                                // 设备上没有浏览器或无法处理该链接时避免崩溃，提示用户手动访问
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "无法打开下载页面，请手动访问 GitHub Releases",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
                         }) {
                             Text(stringResource(R.string.settings_go_download))
                         }

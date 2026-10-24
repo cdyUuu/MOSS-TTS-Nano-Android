@@ -22,17 +22,23 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("release.keystore")
-            storePassword = "mosstts123"
-            keyAlias = "release"
-            keyPassword = "mosstts123"
+            // 条件签名：开发者放入自己的 release.keystore 后即可自动启用正式签名；
+            // 未提供 keystore 时该配置留空，release 变体回退到 debug 签名，保证任何环境都能构建
+            val keystoreFile = file("release.keystore")
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = "mosstts123"
+                keyAlias = "release"
+                keyPassword = "mosstts123"
+            }
         }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("release")
+            // release.keystore 存在时使用正式签名，否则回退 debug 签名，避免 CI 等环境因缺少 keystore 构建失败
+            signingConfig = if (file("release.keystore").exists()) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

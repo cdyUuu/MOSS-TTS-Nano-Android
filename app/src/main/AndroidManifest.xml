@@ -54,6 +54,18 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- 系统 TTS 引擎：让本应用作为系统文字转语音引擎被其他应用调用 -->
+        <service
+            android:name=".service.MossTTSService"
+            android:directBootAware="false"
+            android:exported="true"
+            android:label="@string/system_tts_engine_name">
+            <intent-filter>
+                <action android:name="android.intent.action.TTS_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
     </application>
 
 </manifest>

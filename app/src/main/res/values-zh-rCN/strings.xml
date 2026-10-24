@@ -241,4 +241,9 @@
     <string name="about_latest">已是最新版本</string>
     <string name="about_new_version">发现新版本</string>
     <string name="about_update_failed">检查更新失败</string>
+
+    <!-- 系统 TTS 引擎 -->
+    <string name="system_tts_engine_name">MOSS TTS 本地引擎</string>
+    <string name="system_tts_engine_desc">使用本地 MOSS-TTS 模型的系统文字转语音引擎</string>
+    <string name="system_tts_enable_hint">在系统设置 → 无障碍 / 语言 → 文字转语音输出 中，选择「MOSS TTS 本地引擎」即可让其他应用使用本引擎朗读。首次使用前请确保已在应用内下载模型。</string>
 </resources>

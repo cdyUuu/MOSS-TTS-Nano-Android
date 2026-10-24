@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色模式下的基础主题：Compose 内部使用 MossTTSTheme 管理配色，
+         此处仅保证窗口背景/预览在深色环境下为深色，避免冷启动白屏闪烁 -->
+    <style name="Theme.MossTTS" parent="android:Theme.Material.NoActionBar" />
+</resources>

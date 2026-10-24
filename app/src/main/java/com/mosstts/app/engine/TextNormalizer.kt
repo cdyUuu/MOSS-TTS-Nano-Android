@@ -20,7 +20,7 @@ object TextNormalizer {
 
         // 统一换行和空白
         result = result.replace("\r", " ").replace("\n", " ")
-        while ("  " in result) result = result.replace("  ", " ")
+        result = result.replace(Regex(" +"), " ")
 
         // 数字转换
         result = normalizeNumbers(result)
@@ -45,6 +45,10 @@ object TextNormalizer {
         val normalized = normalize(text)
         if (normalized.isBlank()) return emptyList()
 
+        // token 计数缓存：同一文本可能被反复计数（二分查找、拼接后复核），避免重复跑分词器
+        val tokenCache = HashMap<String, Int>()
+        val countTokens: (String) -> Int = { s -> tokenCache.getOrPut(s) { tokenCounter(s) } }
+
         // 确保中文文本以句末标点结尾
         val prepared = if (containsCJK(normalized)) {
             if (normalized.last() !in sentenceEndPunctuation) "$normalized。" else normalized
@@ -61,7 +65,7 @@ object TextNormalizer {
         for (sentence in sentences) {
             val s = sentence.trim()
             if (s.isEmpty()) continue
-            val sTokens = tokenCounter(s)
+            val sTokens = countTokens(s)
 
             if (sTokens <= maxTokens) {
                 if (current.isEmpty()) {
@@ -69,7 +73,7 @@ object TextNormalizer {
                     currentTokens = sTokens
                 } else if (currentTokens + sTokens <= maxTokens) {
                     current = joinParts(current, s)
-                    currentTokens = tokenCounter(current)
+                    currentTokens = countTokens(current)
                 } else {
                     chunks.add(current.trim())
                     current = s
@@ -86,14 +90,14 @@ object TextNormalizer {
                 for (clause in clauses) {
                     val c = clause.trim()
                     if (c.isEmpty()) continue
-                    val cTokens = tokenCounter(c)
+                    val cTokens = countTokens(c)
                     if (cTokens <= maxTokens) {
                         if (current.isEmpty()) {
                             current = c
                             currentTokens = cTokens
                         } else if (currentTokens + cTokens <= maxTokens) {
                             current = joinParts(current, c)
-                            currentTokens = tokenCounter(current)
+                            currentTokens = countTokens(current)
                         } else {
                             chunks.add(current.trim())
                             current = c
@@ -106,7 +110,7 @@ object TextNormalizer {
                             current = ""
                             currentTokens = 0
                         }
-                        chunks.addAll(splitByTokenBudget(c, tokenCounter, maxTokens))
+                        chunks.addAll(splitByTokenBudget(c, countTokens, maxTokens))
                     }
                 }
             }
@@ -117,7 +121,7 @@ object TextNormalizer {
 
     private fun splitByTokenBudget(
         text: String,
-        tokenCounter: (String) -> Int,
+        countTokens: (String) -> Int,
         maxTokens: Int,
     ): List<String> {
         val result = mutableListOf<String>()
@@ -125,7 +129,7 @@ object TextNormalizer {
         val boundaryChars = clausePunctuation + sentenceEndPunctuation + ' '
 
         while (remaining.isNotEmpty()) {
-            if (tokenCounter(remaining) <= maxTokens) {
+            if (countTokens(remaining) <= maxTokens) {
                 result.add(remaining)
                 break
             }
@@ -136,7 +140,7 @@ object TextNormalizer {
             while (low <= high) {
                 val mid = (low + high) / 2
                 val candidate = remaining.take(mid).trim()
-                if (candidate.isNotEmpty() && tokenCounter(candidate) <= maxTokens) {
+                if (candidate.isNotEmpty() && countTokens(candidate) <= maxTokens) {
                     best = mid
                     low = mid + 1
                 } else {
@@ -211,13 +215,27 @@ object TextNormalizer {
         while (i < text.length) {
             val c = text[i]
             if (c.isDigit()) {
-                // 收集连续数字
+                // 收集连续数字（含千分位逗号与小数点，均有前置条件，避免吞掉句读）
                 val numStart = i
-                while (i < text.length && (text[i].isDigit() || text[i] == ',' || text[i] == '.')) i++
+                var isDecimal = false
+                while (i < text.length) {
+                    when {
+                        text[i].isDigit() -> i++
+                        // 千分位逗号：仅当后面还跟着数字时才吞入，避免吃掉句间逗号
+                        text[i] == ',' && i + 1 < text.length && text[i + 1].isDigit() -> i++
+                        // 小数点：仅当后面紧跟数字、且此前没有小数点时才吞入
+                        text[i] == '.' && !isDecimal &&
+                            i + 1 < text.length && text[i + 1].isDigit() -> {
+                            isDecimal = true
+                            i++
+                        }
+                        else -> break
+                    }
+                }
                 val numStr = text.substring(numStart, i).replace(",", "")
 
                 // 判断是否为小数
-                val readAsChinese = if (numStr.contains('.')) {
+                val readAsChinese = if (isDecimal) {
                     numberToChineseDecimal(numStr)
                 } else {
                     // 大数字或年份
@@ -230,6 +248,12 @@ object TextNormalizer {
                     }
                 }
                 sb.append(readAsChinese)
+            } else if (c == '-' && i + 1 < text.length && text[i + 1].isDigit() &&
+                (i == 0 || text[i - 1].isWhitespace() || text[i - 1] in "((【[（「《‘“\"'")
+            ) {
+                // 负号：位于句首/空白/左括号之后的 "-数字" 读作"负"，其余交给符号表（如 "3-5" 读作"三至五"）
+                sb.append("负")
+                i++
             } else {
                 sb.append(c)
                 i++

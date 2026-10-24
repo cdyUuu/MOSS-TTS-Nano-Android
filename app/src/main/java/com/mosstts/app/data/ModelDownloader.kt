@@ -84,6 +84,21 @@ class ModelDownloader(private val context: Context) {
     private val _progress = MutableStateFlow<DownloadProgress?>(null)
     val progress: StateFlow<DownloadProgress?> = _progress.asStateFlow()
 
+    @Volatile
+    private var cancelled = false
+
+    /**
+     * 取消当前下载。取消后正在进行的网络读取会尽快中断，
+     * 未完成的 .part 临时文件会被清理。
+     */
+    fun cancel() {
+        cancelled = true
+    }
+
+    private fun resetCancelFlag() {
+        cancelled = false
+    }
+
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
@@ -144,6 +159,7 @@ class ModelDownloader(private val context: Context) {
     }
 
     suspend fun downloadAll(mirrorId: String = "hf_mirror"): Boolean = withContext(Dispatchers.IO) {
+        resetCancelFlag()
         val mirror = MIRROR_SOURCES.firstOrNull { it.id == mirrorId } ?: MIRROR_SOURCES[0]
         val baseUrl = mirror.baseUrl
 
@@ -159,9 +175,25 @@ class ModelDownloader(private val context: Context) {
         var requiredSuccess = true
 
         for ((index, pair) in allFiles.withIndex()) {
+            // 检查取消状态
+            if (cancelled) {
+                Log.d(TAG, "Download cancelled")
+                _progress.value = DownloadProgress(
+                    fileName = "",
+                    downloadedBytes = 0,
+                    totalBytes = 0,
+                    currentFileIndex = index,
+                    totalFiles = totalFiles,
+                    error = "下载已取消",
+                )
+                return@withContext false
+            }
             // 检查暂停状态
-            while (com.mosstts.app.service.ModelDownloadService.isPaused) {
+            while (com.mosstts.app.service.ModelDownloadService.isPaused && !cancelled) {
                 kotlinx.coroutines.delay(500)
+            }
+            if (cancelled) {
+                return@withContext false
             }
             val (type, fileName) = pair
             val repo = if (type == "tts") HF_TTS_REPO else HF_CODEC_REPO
@@ -196,6 +228,7 @@ class ModelDownloader(private val context: Context) {
                 Log.w(TAG, "Failed to download required file $fileName from $baseUrl, trying other mirrors")
                 var fallbackSuccess = false
                 for (fallbackMirror in MIRROR_SOURCES) {
+                    if (cancelled) break
                     if (fallbackMirror.id == mirror.id) continue
                     val fallbackUrl = buildDownloadUrl(fallbackMirror.baseUrl, repo, fileName, fallbackMirror.id)
                     if (downloadFile(fallbackUrl, targetFile, index + 1, totalFiles)) {
@@ -255,64 +288,83 @@ class ModelDownloader(private val context: Context) {
         currentIndex: Int,
         totalFiles: Int,
     ): Boolean {
+        if (cancelled) return false
+        val tempFile = File(targetFile.parentFile, "${targetFile.name}.part")
         return try {
-            val tempFile = File(targetFile.parentFile, "${targetFile.name}.part")
             val request = Request.Builder().url(url).build()
-            val response = client.newCall(request).execute()
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Download failed: $url, code: ${response.code}")
+                    return false
+                }
 
-            if (!response.isSuccessful) {
-                Log.e(TAG, "Download failed: $url, code: ${response.code}")
-                response.close()
-                return false
-            }
+                val body = response.body ?: run {
+                    Log.e(TAG, "Download failed: $url, empty body")
+                    return false
+                }
+                val totalBytes = body.contentLength()
+                body.byteStream().use { inputStream ->
+                    tempFile.outputStream().use { outputStream ->
+                        val buffer = ByteArray(8192)
+                        var downloaded = 0L
+                        var read: Int
+                        var lastUpdateTime = System.currentTimeMillis()
+                        var lastDownloaded = 0L
+                        var currentSpeed: Long
 
-            val body = response.body ?: return false
-            val totalBytes = body.contentLength()
-            val inputStream = body.byteStream()
-            val outputStream = tempFile.outputStream()
-            val buffer = ByteArray(8192)
-            var downloaded = 0L
-            var read: Int
-            var lastUpdateTime = System.currentTimeMillis()
-            var lastDownloaded = 0L
-            var currentSpeed = 0L
+                        while (inputStream.read(buffer).also { read = it } != -1) {
+                            if (cancelled) {
+                                throw java.io.IOException("下载已取消")
+                            }
+                            outputStream.write(buffer, 0, read)
+                            downloaded += read
+                            val now = System.currentTimeMillis()
+                            val elapsed = now - lastUpdateTime
+                            if (elapsed >= 500) { // 每500ms更新一次
+                                currentSpeed = if (elapsed > 0) {
+                                    (downloaded - lastDownloaded) * 1000 / elapsed
+                                } else 0
+                                lastUpdateTime = now
+                                lastDownloaded = downloaded
+                                _progress.value = DownloadProgress(
+                                    fileName = targetFile.name,
+                                    downloadedBytes = downloaded,
+                                    totalBytes = totalBytes,
+                                    currentFileIndex = currentIndex,
+                                    totalFiles = totalFiles,
+                                    speedBytesPerSecond = currentSpeed,
+                                )
+                            }
+                        }
 
-            while (inputStream.read(buffer).also { read = it } != -1) {
-                outputStream.write(buffer, 0, read)
-                downloaded += read
-                val now = System.currentTimeMillis()
-                val elapsed = now - lastUpdateTime
-                if (elapsed >= 500) { // 每500ms更新一次
-                    currentSpeed = if (elapsed > 0) {
-                        (downloaded - lastDownloaded) * 1000 / elapsed
-                    } else 0
-                    lastUpdateTime = now
-                    lastDownloaded = downloaded
-                    _progress.value = DownloadProgress(
-                        fileName = targetFile.name,
-                        downloadedBytes = downloaded,
-                        totalBytes = totalBytes,
-                        currentFileIndex = currentIndex,
-                        totalFiles = totalFiles,
-                        speedBytesPerSecond = currentSpeed,
-                    )
+                        outputStream.flush()
+                    }
                 }
             }
 
-            outputStream.flush()
-            outputStream.close()
-            inputStream.close()
-            response.close()
+            if (cancelled) {
+                tempFile.delete()
+                return false
+            }
 
             if (tempFile.renameTo(targetFile)) {
                 Log.d(TAG, "Downloaded: ${targetFile.name}, size: ${targetFile.length()}")
                 true
             } else {
                 Log.e(TAG, "Failed to rename temp file: ${tempFile.name}")
+                tempFile.delete()
                 false
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Download error: ${e.message}", e)
+            if (cancelled) {
+                Log.d(TAG, "Download cancelled: ${targetFile.name}")
+            } else {
+                Log.e(TAG, "Download error: ${e.message}", e)
+            }
+            // 清理未完成的临时文件，避免残留 .part 占用空间
+            try {
+                tempFile.delete()
+            } catch (_: Exception) {}
             false
         }
     }

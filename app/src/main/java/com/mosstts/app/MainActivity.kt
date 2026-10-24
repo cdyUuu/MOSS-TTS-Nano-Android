@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -95,22 +96,15 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
         requestNeededPermissions()
 
-        // 读取偏好设置
-        val prefs = getSharedPreferences("mosstts_settings", MODE_PRIVATE)
-        val darkMode = prefs.getString("dark_mode_string", "system") ?: "system"
+        val app = application as MossTTSApp
 
         setContent {
-            var currentDarkMode by remember { mutableStateOf(darkMode) }
+            // 深色模式初始值统一从 DataStore 读取（与设置页的写入源保持一致），避免冷启动时主题回退到"跟随系统"导致不一致
+            val currentDarkMode by app.preferences.darkMode.collectAsState(initial = "system")
             var hideNav by remember { mutableStateOf(false) }
-            // 监听设置变化
-            LaunchedEffect(Unit) {
-                (application as MossTTSApp).preferences.darkMode.collect {
-                    currentDarkMode = it
-                }
-            }
             // 监听隐藏导航条设置变化
             LaunchedEffect(Unit) {
-                (application as MossTTSApp).preferences.hideNavigationBar.collect { hide ->
+                app.preferences.hideNavigationBar.collect { hide ->
                     hideNav = hide
                     window.decorView.post {
                         hideNavigationBar(hide)
